@@ -1,0 +1,33 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        
+    - name: Install dependencies
+      run: |
+        npm install -g pnpm
+        pnpm install
+        
+    - name: Run ESLint
+      run: pnpm lint
+      
+    - name: Run tests
+      run: pnpm test
+      
+    - name: Build
+      run: pnpm build
