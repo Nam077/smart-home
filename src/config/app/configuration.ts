@@ -1,11 +1,7 @@
 import { registerAs } from '@nestjs/config';
-import { z } from 'zod';
+import type { z } from 'zod';
 
-export const AppConfigSchema = z.object({
-    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-    PORT: z.number().default(3000),
-    API_PREFIX: z.string().default('api'),
-});
+import { AppConfigSchema } from './validation.schema';
 
 export type AppConfigType = z.infer<typeof AppConfigSchema>;
 
@@ -14,11 +10,17 @@ export default registerAs('app', () => {
         NODE_ENV: process.env.NODE_ENV,
         PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
         API_PREFIX: process.env.API_PREFIX,
+        APP_NAME: process.env.APP_NAME,
+        APP_DESCRIPTION: process.env.APP_DESCRIPTION,
+        APP_VERSION: process.env.APP_VERSION,
     });
 
     return {
         nodeEnv: config.NODE_ENV,
         port: config.PORT,
         apiPrefix: config.API_PREFIX,
+        name: config.APP_NAME,
+        description: config.APP_DESCRIPTION,
+        version: config.APP_VERSION,
     };
 });
