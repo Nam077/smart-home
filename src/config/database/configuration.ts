@@ -22,6 +22,7 @@ export default registerAs('database', (): DataSourceOptions => {
         database: config.DB_DATABASE,
         entities: ['dist/**/*.entity{.ts,.js}'],
         synchronize: config.NODE_ENV === 'development',
-        logging: config.NODE_ENV === 'development',
+        // logging: config.NODE_ENV === 'development',
+        logging: false,
     };
 });

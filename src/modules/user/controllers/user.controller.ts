@@ -139,6 +139,16 @@ export class UserController {
         return this.userService.findWithPagination(query);
     }
 
+    @Get(':id')
+    @ApiOperation({ summary: 'Get user by ID' })
+    @ApiParam({ name: 'id', description: 'User ID', type: String, format: 'uuid' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'User retrieved successfully', type: User })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'User not found' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
+    async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<User> {
+        return this.userService.findById(id);
+    }
+
     @Patch(':id')
     @ApiOperation({ summary: 'Update user by ID' })
     @ApiParam({ name: 'id', description: 'User ID', type: String, format: 'uuid' })
