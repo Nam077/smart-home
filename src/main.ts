@@ -5,6 +5,8 @@ import * as compression from 'compression';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { ErrorInterceptor } from './common/interceptors/error.interceptor';
 
 /**
  * Starts the application.
@@ -18,6 +20,12 @@ async function bootstrap() {
             whitelist: true,
             transform: true,
         }),
+    );
+
+    // Global interceptors
+    app.useGlobalInterceptors(
+        new TransformInterceptor(),
+        new ErrorInterceptor(),
     );
 
     // Security
