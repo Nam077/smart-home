@@ -4,6 +4,9 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '@app/modules/auth/auth.module';
+import { DeviceModule } from '@app/modules/device/device.module';
+import { MqttModule } from '@app/modules/mqtt/mqtt.module';
+import { RoomModule } from '@app/modules/room/room.module';
 import { UserModule } from '@app/modules/user/user.module';
 
 import appConfig from './config/app/configuration';
@@ -30,6 +33,9 @@ import jwtConfig from './config/jwt/configuration';
         ]),
         UserModule,
         AuthModule,
+        DeviceModule,
+        RoomModule,
+        MqttModule,
     ],
 })
 export class AppModule {}

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Device Control Panel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            max-width: 800px; 
+            margin: 0 auto;
+            background-color: #f5f5f5;
+        }
+        .control-panel { 
+            margin-top: 20px; 
+            padding: 20px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .device-controls { 
+            display: none;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .control-group { 
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .status-group {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        .status-group.online {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .status-group.offline {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .status-item {
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+        label { 
+            display: inline-block; 
+            width: 120px;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+        }
+        button { 
+            margin: 5px; 
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #output { 
+            margin-top: 20px; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            height: 200px; 
+            overflow-y: auto;
+            background-color: white;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .log-entry {
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 3px;
+        }
+        .log-entry.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .log-entry.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .log-entry.info {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.8em;
+            margin-right: 8px;
+        }
+        .control-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+        .btn-green {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-green:hover {
+            background-color: #45a049;
+        }
+        .btn-red {
+            background-color: #f44336;
+            color: white;
+        }
+        .btn-red:hover {
+            background-color: #da190b;
+        }
+        .status-online {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .status-offline {
+            color: #f44336;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Device Control Panel</h1>
+    
+    <div class="control-panel">
+        <div class="connection-controls">
+            <div class="control-group">
+                <label for="deviceId">Device ID:</label>
+                <input value="5946beb7-cbc9-4d47-976a-8c2daf94c2d7" type="text" id="deviceId" placeholder="Enter device ID" />
+                <button id="connect-btn">Connect</button>
+                <button id="disconnect-btn" style="display: none;">Disconnect</button>
+            </div>
+        </div>
+
+        <div id="device-status-panel" class="status-group" style="display: none;">
+            <h3>Device Status</h3>
+            <div class="status-item">Online: <span id="device-online">Offline</span></div>
+            <div class="status-item">Connected: <span id="device-connected">Disconnected</span></div>
+            <div class="status-item">Last Seen: <span id="device-last-seen">N/A</span></div>
+            <div class="status-item">Brightness: <span id="device-brightness">0%</span></div>
+            <div class="status-item">Value: <span id="device-value">0</span></div>
+            <div class="status-item">Temperature: <span id="device-temperature">N/A</span></div>
+            <div class="status-item">Status: <span id="device-status">Off</span></div>
+        </div>
+
+        <div id="device-controls" class="device-controls" style="display: none;">
+            <h3>Device Controls</h3>
+            <div class="control-group">
+                <button id="power-btn" onclick="togglePower()" class="control-btn btn-green">Turn On</button>
+            </div>
+            <div class="control-group">
+                <label for="brightness-slider">Brightness:</label>
+                <input type="range" id="brightness-slider" min="0" max="100" value="50" oninput="updateBrightnessValue(this.value)" />
+                <span id="brightness-value">50%</span>
+                <button onclick="setBrightness()" class="control-btn">Set</button>
+            </div>
+            <!-- value -->
+
+            <div class="control-group">
+                <label for="temperature-slider">Temperature:</label>
+                <input type="range" id="temperature-slider" min="0" max="100" value="50" oninput="updateTemperatureValue(this.value)" />
+                <span id="temperature-value">50°C</span>
+                <button onclick="setTemperature()" class="control-btn">Set</button>
+            </div>
+
+            <div class="control-group">
+                <label for="value-slider">Value:</label>
+                <input type="range" id="value-slider" min="0" max="100" value="0" oninput="updateValueValue(this.value)" />
+                <span id="value-value">0</span>
+                <button onclick="setValue()" class="control-btn">Set</button>
+            </div>
+
+             
+        </div>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        let client = null;
+        let isConnected = false;
+        let currentDeviceId = '';
+        let reconnectTimeout = null;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function connect() {
+            currentDeviceId = document.getElementById('deviceId').value.trim();
+            if (!currentDeviceId) {
+                log('Please enter a device ID', 'error');
+                return;
+            }
+
+            log('Connecting to MQTT broker...');
+
+            const clientId = `web_${Math.random().toString(16).substr(2, 8)}`;
+            client = new Paho.MQTT.Client("localhost", 8883, "/mqtt", clientId);
+
+            client.onConnectionLost = onConnectionLost;
+            client.onMessageArrived = onMessageArrived;
+
+            try {
+                client.connect({
+                    onSuccess: onConnectSuccess,
+                    onFailure: onConnectFailure,
+                    useSSL: false,
+                    userName: 'smarthome',
+                    password: 'smarthome123',
+                    keepAliveInterval: 60
+                });
+            } catch (error) {
+                log(`Connection error: ${error.message}`, 'error');
+            }
+        }
+
+        function onConnectSuccess() {
+            isConnected = true;
+            log('Connected to MQTT broker', 'success');
+            
+            document.getElementById('connect-btn').style.display = 'none';
+            document.getElementById('disconnect-btn').style.display = 'inline-block';
+            document.getElementById('device-controls').style.display = 'block';
+            document.getElementById('device-status-panel').style.display = 'block';
+            
+            subscribeToDevice();
+            clearTimeout(reconnectTimeout);
+        }
+
+        function onConnectFailure(error) {
+            isConnected = false;
+            log(`Connection failed: ${error.errorMessage}`, 'error');
+            hideDeviceControls();
+            reconnectTimeout = setTimeout(connect, 5000);
+        }
+
+        function subscribeToDevice() {
+            if (!currentDeviceId || !client || !client.isConnected()) {
+                log('Cannot subscribe: client not ready', 'error');
+                return;
+            }
+
+            const statusTopic = `device/${currentDeviceId}/status`;
+            const dataTopic = `device/${currentDeviceId}/data`;
+
+            try {
+                client.subscribe(statusTopic, {
+                    onSuccess: () => {
+                        log(`Subscribed to device status`, 'success');
+                        client.subscribe(dataTopic, {
+                            onSuccess: () => {
+                                log(`Subscribed to device data`, 'success');
+                                publishCommand({ type: 'get_status' });
+                            },
+                            onFailure: (error) => log(`Failed to subscribe to data: ${error.errorMessage}`, 'error')
+                        });
+                    },
+                    onFailure: (error) => log(`Failed to subscribe to status: ${error.errorMessage}`, 'error')
+                });
+            } catch (error) {
+                log(`Subscription error: ${error.message}`, 'error');
+            }
+        }
+
+        function onMessageArrived(message) {
+            try {
+                const payload = JSON.parse(message.payloadString);
+                log(`Received message on ${message.destinationName}: ${JSON.stringify(payload, null, 2)}`, 'info');
+
+                if (message.destinationName.endsWith('/status')) {
+                    log('Updating device status panel with payload', 'info');
+                    updateDeviceStatusPanel(payload);
+                } else if (message.destinationName.endsWith('/data')) {
+                    log('Received data update', 'info');
+                    updateDeviceData(payload);
+                }
+            } catch (error) {
+                log(`Error parsing message: ${error.message}`, 'error');
+            }
+        }
+
+        function updateDeviceStatusPanel(status) {
+            if (!status) return;
+
+            const statusPanel = document.getElementById('device-status-panel');
+            statusPanel.style.display = 'block';
+            
+            if (status.isOnline !== undefined) {
+                document.getElementById('device-online').textContent = status.isOnline ? 'Online' : 'Offline';
+                document.getElementById('device-online').className = status.isOnline ? 'status-online' : 'status-offline';
+            }
+            
+            if (status.isConnected !== undefined) {
+                document.getElementById('device-connected').textContent = status.isConnected ? 'Connected' : 'Disconnected';
+                document.getElementById('device-connected').className = status.isConnected ? 'status-online' : 'status-offline';
+            }
+            
+            if (status.lastSeenAt) {
+                document.getElementById('device-last-seen').textContent = new Date(status.lastSeenAt).toLocaleString();
+            }
+            
+            if (status.brightness !== undefined) {
+                document.getElementById('device-brightness').textContent = `${status.brightness}%`;
+                document.getElementById('brightness-slider').value = status.brightness;
+                document.getElementById('brightness-value').textContent = `${status.brightness}%`;
+            }
+            
+            if (status.value !== undefined) {
+                const value = parseInt(status.value);
+                const displayValue = status.unit ? `${value} ${status.unit}` : value;
+                document.getElementById('device-value').textContent = displayValue;
+                document.getElementById('value-slider').value = value;
+                document.getElementById('value-value').textContent = value;
+            }
+
+            if (status.temperature !== undefined) {
+                document.getElementById('device-temperature').textContent = `${status.temperature}°C`;
+                document.getElementById('temperature-slider').value = status.temperature;
+                document.getElementById('temperature-value').textContent = `${status.temperature}°C`;
+            }
+            
+            if (status.status !== undefined) {
+                const isOn = typeof status.status === 'boolean' ? status.status : 
+                           typeof status.status === 'string' ? status.status.toLowerCase() === 'on' || status.status === 'true' : false;
+                document.getElementById('device-status').textContent = isOn ? 'ON' : 'OFF';
+                updatePowerButton(isOn);
+            }
+
+            if (status.name) {
+                document.title = `${status.name} - Smart Device Control Panel`;
+            }
+        }
+
+        function updatePowerButton(isOn) {
+            const powerBtn = document.getElementById('power-btn');
+            if (isOn) {
+                powerBtn.textContent = 'Turn Off';
+                powerBtn.className = 'control-btn btn-red';
+            } else {
+                powerBtn.textContent = 'Turn On';
+                powerBtn.className = 'control-btn btn-green';
+            }
+        }
+
+        function updateDeviceData(data) {
+            if (data.value !== undefined) {
+                const value = parseInt(data.value);
+                log(`Updating value to: ${value}`, 'info');
+                document.getElementById('device-value').textContent = value;
+                document.getElementById('value-slider').value = value;
+                document.getElementById('value-value').textContent = value;
+            }
+        }
+
+        function setValue() {
+            if (!isConnected) {
+                log('Not connected to MQTT broker', 'error');
+                return;
+            }
+            const valueSlider = document.getElementById('value-slider');
+            const value = parseInt(valueSlider.value);
+            publishCommand({
+                type: 'set_value',
+                value: value
+            });
+            log(`Setting value to ${value}`, 'info');
+        }
+
+        function updateValueValue(value) {
+            value = parseInt(value);
+            document.getElementById('value-value').textContent = value;
+        }
+
+        function publishCommand(command) {
+            if (!client || !client.isConnected()) {
+                log('Cannot publish: client not ready', 'error');
+                return;
+            }
+
+            try {
+                const topic = `device/${currentDeviceId}/control`;
+                const message = new Paho.MQTT.Message(JSON.stringify(command));
+                message.destinationName = topic;
+                client.send(message);
+                log(`Sent command: ${JSON.stringify(command)}`, 'info');
+            } catch (error) {
+                log(`Error sending command: ${error.message}`, 'error');
+            }
+        }
+
+        function togglePower() {
+            if (!isConnected) {
+                log('Not connected to MQTT broker', 'error');
+                return;
+            }
+            const powerBtn = document.getElementById('power-btn');
+            const isCurrentlyOn = powerBtn.textContent.includes('Off'); // If button says "Turn Off", device is currently on
+            const newStatus = isCurrentlyOn ? false : true;
+            publishCommand({ 
+                type: 'set_status',
+                status: newStatus
+            });
+        }
+
+        function setBrightness() {
+            if (!isConnected) {
+                log('Not connected to MQTT broker', 'error');
+                return;
+            }
+            const brightnessSlider = document.getElementById('brightness-slider');
+            publishCommand({
+                type: 'set_brightness',
+                brightness: parseInt(brightnessSlider.value)
+            });
+        }
+
+        function updateBrightnessValue(value) {
+            document.getElementById('brightness-value').textContent = `${value}%`;
+        }
+
+        function setTemperature() {
+            if (!isConnected) {
+                log('Not connected to MQTT broker', 'error');
+                return;
+            }
+            const temperatureSlider = document.getElementById('temperature-slider');
+            publishCommand({
+                type: 'set_temperature',
+                temperature: parseInt(temperatureSlider.value)
+            });
+            log(`Setting temperature to ${temperatureSlider.value}°C`, 'info');
+        }
+
+        function updateTemperatureValue(value) {
+            document.getElementById('temperature-value').textContent = `${value}°C`;
+        }
+
+        function disconnect() {
+            if (client && client.isConnected()) {
+                try {
+                    client.disconnect();
+                    onDisconnect();
+                } catch (error) {
+                    log(`Disconnect error: ${error.message}`, 'error');
+                }
+            } else {
+                onDisconnect();
+            }
+        }
+
+        function onDisconnect() {
+            isConnected = false;
+            document.getElementById('connect-btn').style.display = 'inline-block';
+            document.getElementById('disconnect-btn').style.display = 'none';
+            document.getElementById('device-controls').style.display = 'none';
+            document.getElementById('device-status-panel').style.display = 'none';
+            log('Disconnected from MQTT broker', 'info');
+            clearTimeout(reconnectTimeout);
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                log(`Connection lost: ${responseObject.errorMessage}`, 'error');
+            }
+            isConnected = false;
+            document.getElementById('device-controls').style.display = 'none';
+            document.getElementById('device-status-panel').style.display = 'none';
+            document.getElementById('connect-btn').style.display = 'inline-block';
+            document.getElementById('disconnect-btn').style.display = 'none';
+            
+            reconnectTimeout = setTimeout(connect, 5000);
+        }
+
+        // Event Listeners
+        document.getElementById('connect-btn').addEventListener('click', connect);
+        document.getElementById('disconnect-btn').addEventListener('click', disconnect);
+    </script>
+</body>
+</html>

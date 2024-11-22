@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Device Control Panel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .device-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .device-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .online {
+            background-color: #4CAF50;
+        }
+        .offline {
+            background-color: #f44336;
+        }
+        .control-panel {
+            margin-top: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="range"] {
+            width: 200px;
+        }
+        .connection-status {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .connected {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .disconnected {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MQTT Device Control Panel</h1>
+        
+        <div id="connectionStatus" class="connection-status disconnected">
+            Disconnected
+        </div>
+
+        <div class="control-panel">
+            <h2>Add Device</h2>
+            <input type="text" id="deviceId" placeholder="Device ID">
+            <button onclick="addDevice()">Add Device</button>
+        </div>
+
+        <div id="deviceList">
+            <!-- Devices will be added here dynamically -->
+        </div>
+    </div>
+
+    <script>
+        const mqttConfig = {
+            hostname: 'localhost',
+            port: 8083,  // WebSocket port
+            username: 'smarthome',
+            password: 'smarthome123',
+            clientId: 'webclient_' + Math.random().toString(16).substr(2, 8)
+        };
+
+        let client;
+        const devices = new Map();
+
+        function connect() {
+            try {
+                client = new Paho.MQTT.Client(
+                    mqttConfig.hostname,
+                    Number(mqttConfig.port),
+                    "/mqtt",
+                    mqttConfig.clientId
+                );
+
+                // Set callback handlers
+                client.onConnectionLost = onConnectionLost;
+                client.onMessageArrived = onMessageArrived;
+
+                // Connect the client
+                client.connect({
+                    onSuccess: onConnect,
+                    onFailure: onConnectFailure,
+                    userName: mqttConfig.username,
+                    password: mqttConfig.password,
+                    useSSL: false,
+                    keepAliveInterval: 60
+                });
+            } catch (error) {
+                console.error('Connection error:', error);
+                document.getElementById('connectionStatus').className = 'connection-status disconnected';
+                document.getElementById('connectionStatus').textContent = 'Connection Error';
+            }
+        }
+
+        function onConnect() {
+            console.log('Connected to MQTT broker');
+            document.getElementById('connectionStatus').className = 'connection-status connected';
+            document.getElementById('connectionStatus').textContent = 'Connected';
+            
+            // Subscribe to all device status topics
+            client.subscribe('device/+/status');
+        }
+
+        function onConnectFailure(error) {
+            console.error('Failed to connect:', error);
+            document.getElementById('connectionStatus').className = 'connection-status disconnected';
+            document.getElementById('connectionStatus').textContent = 'Connection Failed';
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log("Connection lost:", responseObject.errorMessage);
+            }
+            document.getElementById('connectionStatus').className = 'connection-status disconnected';
+            document.getElementById('connectionStatus').textContent = 'Disconnected';
+        }
+
+        function onMessageArrived(message) {
+            const topic = message.destinationName;
+            const payload = JSON.parse(message.payloadString);
+            
+            const topicParts = topic.split('/');
+            if (topicParts.length === 3 && topicParts[0] === 'device' && topicParts[2] === 'status') {
+                const deviceId = topicParts[1];
+                updateDeviceStatus(deviceId, payload);
+            }
+        }
+
+        function addDevice() {
+            const deviceId = document.getElementById('deviceId').value.trim();
+            if (!deviceId) return;
+
+            if (!devices.has(deviceId)) {
+                devices.set(deviceId, {
+                    status: false,
+                    isOnline: false,
+                    brightness: 0,
+                    temperature: 0
+                });
+
+                const deviceElement = createDeviceElement(deviceId);
+                document.getElementById('deviceList').appendChild(deviceElement);
+                
+                // Subscribe to device status
+                client.subscribe(`device/${deviceId}/status`);
+            }
+
+            document.getElementById('deviceId').value = '';
+        }
+
+        function publishMessage(topic, payload) {
+            const message = new Paho.MQTT.Message(JSON.stringify(payload));
+            message.destinationName = topic;
+            message.qos = 1;
+            client.send(message);
+        }
+
+        function createDeviceElement(deviceId) {
+            const div = document.createElement('div');
+            div.className = 'device-card';
+            div.id = `device-${deviceId}`;
+            div.innerHTML = `
+                <h3>
+                    <span class="device-status offline"></span>
+                    Device: ${deviceId}
+                </h3>
+                <div>
+                    <p>Status: <span class="device-power">Offline</span></p>
+                    <p>Last Seen: <span class="device-last-seen">Never</span></p>
+                    <div class="control-panel">
+                        <button onclick="toggleDevice('${deviceId}')">Toggle Power</button>
+                        <div>
+                            <label>Brightness:</label>
+                            <input type="range" min="0" max="100" value="0" 
+                                onchange="setBrightness('${deviceId}', this.value)">
+                            <span class="brightness-value">0%</span>
+                        </div>
+                        <div>
+                            <label>Temperature:</label>
+                            <input type="number" min="16" max="30" value="24" 
+                                onchange="setTemperature('${deviceId}', this.value)">
+                            <span>°C</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        function updateDeviceStatus(deviceId, status) {
+            const deviceElement = document.getElementById(`device-${deviceId}`);
+            if (!deviceElement) return;
+
+            const statusIndicator = deviceElement.querySelector('.device-status');
+            const powerStatus = deviceElement.querySelector('.device-power');
+            const lastSeen = deviceElement.querySelector('.device-last-seen');
+            
+            statusIndicator.className = `device-status ${status.isOnline ? 'online' : 'offline'}`;
+            powerStatus.textContent = status.status ? 'On' : 'Off';
+            lastSeen.textContent = status.lastSeenAt ? new Date(status.lastSeenAt).toLocaleString() : 'Never';
+
+            // Update controls
+            const brightnessInput = deviceElement.querySelector('input[type="range"]');
+            const brightnessValue = deviceElement.querySelector('.brightness-value');
+            if (status.brightness !== undefined) {
+                brightnessInput.value = status.brightness;
+                brightnessValue.textContent = `${status.brightness}%`;
+            }
+
+            const temperatureInput = deviceElement.querySelector('input[type="number"]');
+            if (status.temperature !== undefined) {
+                temperatureInput.value = status.temperature;
+            }
+        }
+
+        function toggleDevice(deviceId) {
+            const device = devices.get(deviceId);
+            if (!device) return;
+
+            const newStatus = !device.status;
+            const message = {
+                type: 'set_status',
+                status: newStatus
+            };
+
+            publishMessage(`device/${deviceId}/control`, message);
+        }
+
+        function setBrightness(deviceId, value) {
+            const message = {
+                type: 'set_brightness',
+                brightness: parseInt(value)
+            };
+
+            publishMessage(`device/${deviceId}/control`, message);
+        }
+
+        function setTemperature(deviceId, value) {
+            const message = {
+                type: 'set_temperature',
+                temperature: parseInt(value)
+            };
+
+            publishMessage(`device/${deviceId}/control`, message);
+        }
+
+        // Connect when the page loads
+        connect();
+    </script>
+</body>
+</html>

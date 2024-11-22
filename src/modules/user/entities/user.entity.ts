@@ -10,8 +10,11 @@ import {
     DeleteDateColumn,
     BeforeInsert,
     BeforeUpdate,
+    OneToMany,
 } from 'typeorm';
 
+import { Device } from '@app/modules/device/entities/device.entity';
+import { Room } from '@app/modules/room/entities/room.entity';
 import { IBaseEntity } from '@interfaces/crud.interface';
 
 @Entity('users')
@@ -52,6 +55,12 @@ export class User implements IBaseEntity {
 
     @DeleteDateColumn({ name: 'deleted_at' })
     deletedAt?: Date;
+
+    @OneToMany(() => Device, (device) => device.user)
+    devices: Device[];
+
+    @OneToMany(() => Room, (room) => room.user)
+    rooms: Room[];
 
     @BeforeInsert()
     @BeforeUpdate()
