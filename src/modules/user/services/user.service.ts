@@ -1,7 +1,6 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { isEmpty } from 'lodash';
 import { Repository } from 'typeorm';
 
 import { CreateUserDto } from '@modules/user/dto/create-user.dto';
@@ -30,19 +29,9 @@ export class UserService extends BaseCrudService<User, CreateUserDto, UpdateUser
                     throw new ConflictException(`User with email ${data.email} already exists`);
                 }
 
-                const salt = await bcrypt.genSalt();
-
-                data.password = await bcrypt.hash(data.password, salt);
-
                 return data;
             },
             beforeUpdate: async (id, data) => {
-                if (!isEmpty(data.password)) {
-                    const salt = await bcrypt.genSalt();
-
-                    data.password = await bcrypt.hash(data.password, salt);
-                }
-
                 return data;
             },
         };
