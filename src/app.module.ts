@@ -3,11 +3,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { UserModule } from '@app/modules/user/user.module';
+
 import appConfig from './config/app/configuration';
 import databaseConfig from './config/database/configuration';
 import { validateConfig } from './config/env.validation';
 import jwtConfig from './config/jwt/configuration';
-import { UsersModule } from './modules/users/users.module';
 
 @Module({
     imports: [
@@ -26,7 +27,7 @@ import { UsersModule } from './modules/users/users.module';
                 limit: 10,
             },
         ]),
-        UsersModule,
+        UserModule,
     ],
 })
 export class AppModule {}
