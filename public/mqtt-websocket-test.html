@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px 0;
+            border-bottom: 1px solid #eee;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.active {
+            background-color: #28a745;
+        }
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .value-display {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #0056b3;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="range"] {
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+            margin: 5px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .device-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .online { background-color: #28a745; }
+        .offline { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>MQTT WebSocket Test</h1>
+    
+    <div class="container">
+        <div class="card">
+            <h2>Device Control</h2>
+            <div class="control-group">
+                <label for="deviceId">Device ID:</label>
+                <input type="text" id="deviceId" value="5946beb7-cbc9-4d47-976a-8c2daf94c2d7">
+                <div class="device-status">
+                    <div id="connectionIndicator" class="status-indicator offline"></div>
+                    <span id="connectionStatus">Offline</span>
+                </div>
+            </div>
+
+            <!-- Toggle Control -->
+            <div class="control-group">
+                <h3>Power Control</h3>
+                <button id="toggleButton" onclick="sendToggle()">Turn ON</button>
+                <div class="value-display">Status: <span id="powerStatus">OFF</span></div>
+            </div>
+
+            <!-- Value Control -->
+            <div class="control-group">
+                <h3>Value Control</h3>
+                <input type="range" id="valueSlider" class="slider" min="0" max="100" value="50" 
+                       oninput="updateValueDisplay('value')">
+                <div class="value-display">Value: <span id="valueDisplay">50</span></div>
+                <button onclick="sendValue()">Set Value</button>
+            </div>
+
+            <!-- Brightness Control -->
+            <div class="control-group">
+                <h3>Brightness Control</h3>
+                <input type="range" id="brightnessSlider" class="slider" min="0" max="100" value="75"
+                       oninput="updateValueDisplay('brightness')">
+                <div class="value-display">Brightness: <span id="brightnessDisplay">75</span>%</div>
+                <button onclick="sendBrightness()">Set Brightness</button>
+            </div>
+
+            <!-- Temperature Control -->
+            <div class="control-group">
+                <h3>Temperature Control</h3>
+                <input type="range" id="temperatureSlider" class="slider" min="16" max="30" value="25"
+                       oninput="updateValueDisplay('temperature')">
+                <div class="value-display">Temperature: <span id="temperatureDisplay">25</span>°C</div>
+                <button onclick="sendTemperature()">Set Temperature</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Device Status</h2>
+            <button onclick="getDeviceInfo()">Refresh Info</button>
+            <div id="statusDisplay" class="status"></div>
+
+            <h2>Connection</h2>
+            <button onclick="subscribeToDevice()">Subscribe</button>
+            <button onclick="unsubscribeFromDevice()">Unsubscribe</button>
+
+            <h2>Logs</h2>
+            <div id="logContainer" class="log-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io('http://localhost:3000');
+        let deviceSubscribed = false;
+        let deviceStatus = {
+            isOnline: false,
+            status: false,
+            value: 50,
+            brightness: 75,
+            temperature: 25
+        };
+
+        // Socket connection handlers
+        socket.on('connect', () => {
+            log('Connected to WebSocket server');
+            updateConnectionStatus(true);
+        });
+
+        socket.on('disconnect', () => {
+            log('Disconnected from WebSocket server');
+            updateConnectionStatus(false);
+        });
+
+        // Device event handlers
+        socket.on('device:control:success', (data) => {
+            log('Control success: ' + JSON.stringify(data));
+            showStatus('success', 'Control command sent successfully');
+            updateDeviceStatus(data);
+        });
+
+        socket.on('device:control:error', (data) => {
+            log('Control error: ' + JSON.stringify(data));
+            showStatus('error', 'Error: ' + data.error);
+        });
+
+        socket.on('device:info', (data) => {
+            log('Device info: ' + JSON.stringify(data));
+            showStatus('success', 'Info received');
+            updateDeviceStatus(data);
+        });
+
+        socket.on('device:info:error', (data) => {
+            log('Error getting device info: ' + JSON.stringify(data));
+            showStatus('error', 'Error: ' + data.error);
+        });
+
+        // Control functions
+        function sendToggle() {
+            const newStatus = !deviceStatus.status;
+            const deviceId = document.getElementById('deviceId').value;
+            socket.emit('device:control', {
+                deviceId,
+                type: 'set_status',
+                value: newStatus ? 1 : 0
+            });
+        }
+
+        function sendValue() {
+            const deviceId = document.getElementById('deviceId').value;
+            const value = document.getElementById('valueSlider').value;
+            socket.emit('device:control', {
+                deviceId,
+                type: 'set_value',
+                value: Number(value)
+            });
+        }
+
+        function sendBrightness() {
+            const deviceId = document.getElementById('deviceId').value;
+            const brightness = document.getElementById('brightnessSlider').value;
+            socket.emit('device:control', {
+                deviceId,
+                type: 'set_brightness',
+                value: Number(brightness)
+            });
+        }
+
+        function sendTemperature() {
+            const deviceId = document.getElementById('deviceId').value;
+            const temperature = document.getElementById('temperatureSlider').value;
+            socket.emit('device:control', {
+                deviceId,
+                type: 'set_temperature',
+                value: Number(temperature)
+            });
+        }
+
+        function getDeviceInfo() {
+            const deviceId = document.getElementById('deviceId').value;
+            socket.emit('device:info', deviceId);
+        }
+
+        function subscribeToDevice() {
+            if (!deviceSubscribed) {
+                const deviceId = document.getElementById('deviceId').value;
+                socket.emit('device:subscribe', deviceId);
+                deviceSubscribed = true;
+                log('Subscribed to device: ' + deviceId);
+            }
+        }
+
+        function unsubscribeFromDevice() {
+            if (deviceSubscribed) {
+                const deviceId = document.getElementById('deviceId').value;
+                socket.emit('device:unsubscribe', deviceId);
+                deviceSubscribed = false;
+                log('Unsubscribed from device: ' + deviceId);
+            }
+        }
+
+        // UI update functions
+        function updateValueDisplay(type) {
+            const value = document.getElementById(type + 'Slider').value;
+            document.getElementById(type + 'Display').textContent = value;
+        }
+
+        function updateDeviceStatus(data) {
+            if (!data) return;
+
+            deviceStatus = { ...deviceStatus, ...data };
+
+            // Update power status
+            const powerStatus = document.getElementById('powerStatus');
+            const toggleButton = document.getElementById('toggleButton');
+            if (deviceStatus.status !== undefined) {
+                powerStatus.textContent = deviceStatus.status ? 'ON' : 'OFF';
+                toggleButton.textContent = deviceStatus.status ? 'Turn OFF' : 'Turn ON';
+                toggleButton.className = deviceStatus.status ? 'active' : '';
+            }
+
+            // Update other values if they exist
+            if (deviceStatus.value !== undefined) {
+                document.getElementById('valueSlider').value = deviceStatus.value;
+                document.getElementById('valueDisplay').textContent = deviceStatus.value;
+            }
+            if (deviceStatus.brightness !== undefined) {
+                document.getElementById('brightnessSlider').value = deviceStatus.brightness;
+                document.getElementById('brightnessDisplay').textContent = deviceStatus.brightness;
+            }
+            if (deviceStatus.temperature !== undefined) {
+                document.getElementById('temperatureSlider').value = deviceStatus.temperature;
+                document.getElementById('temperatureDisplay').textContent = deviceStatus.temperature;
+            }
+
+            // Update connection status
+            updateConnectionStatus(deviceStatus.isOnline);
+        }
+
+        function updateConnectionStatus(isOnline) {
+            const indicator = document.getElementById('connectionIndicator');
+            const status = document.getElementById('connectionStatus');
+            
+            indicator.className = 'status-indicator ' + (isOnline ? 'online' : 'offline');
+            status.textContent = isOnline ? 'Online' : 'Offline';
+        }
+
+        // Utility functions
+        function showStatus(type, message) {
+            const statusDisplay = document.getElementById('statusDisplay');
+            statusDisplay.className = 'status ' + type;
+            statusDisplay.textContent = message;
+        }
+
+        function log(message) {
+            const logContainer = document.getElementById('logContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+        }
+
+        // Initial status check
+        getDeviceInfo();
+    </script>
+</body>
+</html>

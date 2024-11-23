@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from '@app/modules/auth/auth.module';
 import { DeviceModule } from '@app/modules/device/device.module';
+import { GatewayModule } from '@app/modules/gateway/gateway.module';
 import { MqttModule } from '@app/modules/mqtt/mqtt.module';
 import { RoomModule } from '@app/modules/room/room.module';
 import { UserModule } from '@app/modules/user/user.module';
@@ -36,6 +37,7 @@ import jwtConfig from './config/jwt/configuration';
         DeviceModule,
         RoomModule,
         MqttModule,
+        GatewayModule,
     ],
 })
 export class AppModule {}

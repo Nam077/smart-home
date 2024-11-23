@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Device Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .connection-status {
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .device-card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .device-status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .online {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .offline {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        input[type="number"] {
+            width: 80px;
+            padding: 5px;
+        }
+        .add-device {
+            margin-bottom: 20px;
+        }
+        .add-device input {
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .message-box {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 20px;
+        }
+        .message-log-entry {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .message-log-entry .timestamp {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .message-log-entry .topic {
+            color: #007bff;
+            font-weight: bold;
+        }
+        .message-log-entry .payload {
+            color: #28a745;
+        }
+        .message-log-entry.error {
+            color: #dc3545;
+            background-color: #fff3f3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Smart Home Device Control</h1>
+            <div id="connectionStatus" class="connection-status disconnected">
+                Disconnected
+            </div>
+            <div class="add-device">
+                <input type="text" id="newDeviceId" placeholder="Enter Device ID">
+                <button onclick="addDevice()">Add Device</button>
+            </div>
+        </div>
+
+        <div id="deviceList">
+            <!-- Devices will be added here dynamically -->
+        </div>
+
+        <div class="message-box">
+            <h2>Message Log</h2>
+            <div id="messageLog"></div>
+        </div>
+    </div>
+
+    <script>
+        // MQTT Configuration
+        const mqttConfig = {
+            hostname: 'localhost',
+            port: 8883,
+            clientId: 'webclient_' + Math.random().toString(16).substr(2, 8),
+            username: 'smarthome',
+            password: 'smarthome123'
+        };
+
+        // Device control types
+        const DeviceControlType = {
+            SET_STATUS: 'set_status',
+            SET_VALUE: 'set_value',
+            SET_BRIGHTNESS: 'set_brightness',
+            SET_TEMPERATURE: 'set_temperature',
+            GET_INFO: 'get_info'
+        };
+
+        let client;
+        const devices = new Map();
+
+        function connect() {
+            console.log('Connecting to MQTT broker...');
+            
+            try {
+                client = new Paho.MQTT.Client(
+                    mqttConfig.hostname,
+                    Number(mqttConfig.port),
+                    '/mqtt',
+                    mqttConfig.clientId
+                );
+
+                client.onConnectionLost = onConnectionLost;
+                client.onMessageArrived = onMessageArrived;
+
+                client.connect({
+                    onSuccess: onConnect,
+                    onFailure: onConnectFailure,
+                    userName: mqttConfig.username,
+                    password: mqttConfig.password,
+                    useSSL: false,
+                    keepAliveInterval: 30
+                });
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateConnectionStatus(false);
+            }
+        }
+
+        function onConnect() {
+            console.log('Connected to MQTT broker');
+            updateConnectionStatus(true);
+            
+            // Subscribe to all device topics
+            client.subscribe('device/+/status', { qos: 1 });
+            client.subscribe('device/+/data', { qos: 1 });
+            console.log('Subscribed to device topics');
+
+            // Log connection and subscription
+            const logEntry = document.createElement('div');
+            logEntry.className = 'message-log-entry';
+            logEntry.innerHTML = `
+                <span class="timestamp">[${new Date().toLocaleTimeString()}]</span>
+                <span class="topic">System</span>
+                <br>
+                <span class="payload">Connected and subscribed to topics:
+                - device/+/status
+                - device/+/data</span>
+            `;
+            const messageLog = document.getElementById('messageLog');
+            messageLog.insertBefore(logEntry, messageLog.firstChild);
+            
+            // Request info for all existing devices
+            devices.forEach((device, deviceId) => {
+                console.log('Requesting info for device:', deviceId);
+                requestDeviceInfo(deviceId);
+            });
+        }
+
+        function onConnectFailure(error) {
+            console.error('Failed to connect:', error);
+            updateConnectionStatus(false);
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.log('Connection lost:', responseObject.errorMessage);
+            }
+            updateConnectionStatus(false);
+        }
+
+        function onMessageArrived(message) {
+            const topic = message.destinationName;
+            const payload = JSON.parse(message.payloadString);
+            
+            // Extract deviceId from topic (format: device/{deviceId}/...)
+            const deviceId = topic.split('/')[1];
+            
+            // Log message
+            const logEntry = document.createElement('div');
+            logEntry.className = 'message-log-entry';
+            logEntry.innerHTML = `
+                <span class="timestamp">[${new Date().toLocaleTimeString()}]</span>
+                <span class="topic">${topic}</span>
+                <br>
+                <span class="payload">${JSON.stringify(payload, null, 2)}</span>
+            `;
+            const messageLog = document.getElementById('messageLog');
+            messageLog.insertBefore(logEntry, messageLog.firstChild);
+
+            // Handle different message types
+            if (topic.endsWith('/status')) {
+                console.log('Status update received:', payload);
+                handleStatusUpdate(deviceId, payload);
+            } else if (topic.endsWith('/data')) {
+                console.log('Data update received:', payload);
+                handleDataUpdate(deviceId, payload);
+            }
+        }
+
+        function handleStatusUpdate(deviceId, payload) {
+            // Create device if it doesn't exist
+            if (!devices.has(deviceId)) {
+                console.log('New device detected:', deviceId);
+                createDeviceCard(deviceId);
+            }
+
+            const status = {
+                isOnline: true,
+                lastSeenAt: new Date().toISOString(),
+                ...payload
+            };
+
+            updateDeviceStatus(deviceId, status);
+        }
+
+        function handleDataUpdate(deviceId, payload) {
+            if (!devices.has(deviceId)) {
+                console.log('New device detected from data:', deviceId);
+                createDeviceCard(deviceId);
+            }
+
+            // Handle different data types
+            if (payload.type === 'GET_INFO_RESPONSE') {
+                console.log('Device info received:', payload);
+                const status = {
+                    isOnline: true,
+                    lastSeenAt: new Date().toISOString(),
+                    status: payload.status,
+                    value: payload.value,
+                    brightness: payload.brightness,
+                    temperature: payload.temperature,
+                    unit: payload.unit
+                };
+                updateDeviceStatus(deviceId, status);
+            } else if (payload.type === 'VALUE_CHANGED') {
+                console.log('Value change notification:', payload);
+                updateDeviceStatus(deviceId, {
+                    value: payload.value,
+                    unit: payload.unit
+                });
+            } else if (payload.type === 'STATUS_CHANGED') {
+                console.log('Status change notification:', payload);
+                updateDeviceStatus(deviceId, {
+                    status: payload.status
+                });
+            } else if (payload.type === 'BRIGHTNESS_CHANGED') {
+                console.log('Brightness change notification:', payload);
+                updateDeviceStatus(deviceId, {
+                    brightness: payload.brightness
+                });
+            } else if (payload.type === 'TEMPERATURE_CHANGED') {
+                console.log('Temperature change notification:', payload);
+                updateDeviceStatus(deviceId, {
+                    temperature: payload.temperature
+                });
+            }
+        }
+
+        function addDevice() {
+            const deviceId = document.getElementById('newDeviceId').value.trim();
+            if (!deviceId) {
+                alert('Please enter a device ID');
+                return;
+            }
+
+            if (devices.has(deviceId)) {
+                alert('Device already exists');
+                return;
+            }
+
+            createDeviceCard(deviceId);
+            document.getElementById('newDeviceId').value = '';
+        }
+
+        function createDeviceCard(deviceId) {
+            const deviceCard = document.createElement('div');
+            deviceCard.className = 'device-card';
+            deviceCard.id = `device-${deviceId}`;
+
+            // Initialize device state
+            const initialState = {
+                status: false,
+                value: 0,
+                brightness: 0,
+                temperature: 24,
+                isOnline: false,
+                lastSeenAt: null
+            };
+            
+            deviceCard.innerHTML = `
+                <div class="device-header">
+                    <h2>Device: ${deviceId}</h2>
+                    <span class="device-status offline">Offline</span>
+                </div>
+                <div class="control-group">
+                    <label>Power</label>
+                    <button onclick="togglePower('${deviceId}')" class="power-button">Turn ON</button>
+                </div>
+                <div class="control-group">
+                    <label>Value: <span class="value-display">${initialState.value}</span></label>
+                    <input type="range" min="0" max="100" value="${initialState.value}" 
+                           oninput="updateValue('${deviceId}', this.value)"
+                           class="value-slider">
+                </div>
+                <div class="control-group">
+                    <label>Brightness: <span class="brightness-value">${initialState.brightness}%</span></label>
+                    <input type="range" min="0" max="100" value="${initialState.brightness}" 
+                           oninput="updateBrightness('${deviceId}', this.value)">
+                </div>
+                <div class="control-group">
+                    <label>Temperature (°C)</label>
+                    <input type="number" min="16" max="30" value="${initialState.temperature}" 
+                           oninput="updateTemperature('${deviceId}', this.value)">
+                </div>
+                <div class="device-info">
+                    <p>Status: <span class="device-power">Off</span></p>
+                    <p>Value: <span class="device-value">${initialState.value}</span></p>
+                    <p>Last seen: <span class="device-last-seen">Never</span></p>
+                </div>
+            `;
+
+            document.getElementById('deviceList').appendChild(deviceCard);
+            devices.set(deviceId, initialState);
+
+            // Request device info immediately after creating the card
+            if (client && client.isConnected()) {
+                requestDeviceInfo(deviceId);
+            }
+        }
+
+        function publishCommand(deviceId, type, value) {
+            if (!client || !client.isConnected()) {
+                console.error('MQTT Client not connected');
+                alert('Not connected to MQTT broker');
+                return;
+            }
+
+            const command = {
+                type: type,
+                value: value,
+                timestamp: new Date().toISOString()  // Thêm timestamp
+            };
+
+            const topic = `device/${deviceId}/control`;
+            console.log('Publishing to topic:', topic);
+            console.log('Command payload:', command);
+
+            const message = new Paho.MQTT.Message(JSON.stringify(command));
+            message.destinationName = topic;
+            message.qos = 1;
+            
+            try {
+                // Log outgoing message
+                const logEntry = document.createElement('div');
+                logEntry.className = 'message-log-entry';
+                logEntry.innerHTML = `
+                    <span class="timestamp">[${new Date().toLocaleTimeString()}]</span>
+                    <span class="topic">${topic}</span> (PUBLISH)
+                    <br>
+                    <span class="payload">${JSON.stringify(command, null, 2)}</span>
+                `;
+                const messageLog = document.getElementById('messageLog');
+                messageLog.insertBefore(logEntry, messageLog.firstChild);
+                
+                client.send(message);
+                console.log('Command sent successfully');
+                
+                // Thêm timeout để kiểm tra response
+                console.log('Waiting for response...');
+                setTimeout(() => {
+                    console.log('If no response received within 5 seconds, check if server is processing the command');
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error sending command:', error);
+                console.error('Error details:', {
+                    topic: topic,
+                    command: command,
+                    error: error.message
+                });
+                
+                const logEntry = document.createElement('div');
+                logEntry.className = 'message-log-entry error';
+                logEntry.innerHTML = `
+                    <span class="timestamp">[${new Date().toLocaleTimeString()}]</span>
+                    <span class="topic">${topic}</span>
+                    <br>
+                    Error sending command: ${error.message}
+                    <br>
+                    Command was: ${JSON.stringify(command, null, 2)}
+                `;
+                const messageLog = document.getElementById('messageLog');
+                messageLog.insertBefore(logEntry, messageLog.firstChild);
+                
+                alert('Error sending command: ' + error.message);
+            }
+        }
+
+        function togglePower(deviceId) {
+            const device = devices.get(deviceId);
+            if (device) {
+                const newStatus = !device.status;
+                const button = document.querySelector(`#device-${deviceId} .power-button`);
+                button.textContent = newStatus ? 'Turn OFF' : 'Turn ON';
+                publishCommand(deviceId, DeviceControlType.SET_STATUS, newStatus);
+            }
+        }
+
+        function updateValue(deviceId, value) {
+            const numValue = parseInt(value);
+            const device = devices.get(deviceId);
+            if (device) {
+                const deviceElement = document.getElementById(`device-${deviceId}`);
+                deviceElement.querySelector('.value-display').textContent = numValue;
+                publishCommand(deviceId, DeviceControlType.SET_VALUE, numValue);
+            }
+        }
+
+        function updateBrightness(deviceId, value) {
+            const brightnessValue = parseInt(value);
+            document.querySelector(`#device-${deviceId} .brightness-value`).textContent = `${brightnessValue}%`;
+            publishCommand(deviceId, DeviceControlType.SET_BRIGHTNESS, brightnessValue);
+        }
+
+        function updateTemperature(deviceId, value) {
+            const temperature = parseInt(value);
+            publishCommand(deviceId, DeviceControlType.SET_TEMPERATURE, temperature);
+        }
+
+        function requestDeviceInfo(deviceId) {
+            publishCommand(deviceId, DeviceControlType.GET_INFO, null);
+        }
+
+        function updateDeviceStatus(deviceId, status) {
+            const device = devices.get(deviceId);
+            if (!device) return;
+
+            // Update device state
+            device.status = status.status ?? device.status;
+            device.isOnline = status.isOnline ?? device.isOnline;
+            device.lastSeenAt = status.lastSeenAt ?? device.lastSeenAt;
+            device.brightness = status.brightness ?? device.brightness;
+            device.temperature = status.temperature ?? device.temperature;
+            device.value = status.value ?? device.value;
+            device.unit = status.unit ?? device.unit;
+
+            // Update UI
+            const deviceElement = document.getElementById(`device-${deviceId}`);
+            if (!deviceElement) return;
+
+            // Update status indicator
+            const statusIndicator = deviceElement.querySelector('.device-status');
+            statusIndicator.className = `device-status ${device.isOnline ? 'online' : 'offline'}`;
+            statusIndicator.textContent = device.isOnline ? 'Online' : 'Offline';
+            
+            // Update power button and status
+            const powerButton = deviceElement.querySelector('.power-button');
+            const powerStatus = deviceElement.querySelector('.device-power');
+            if (powerButton) powerButton.textContent = device.status ? 'Turn OFF' : 'Turn ON';
+            if (powerStatus) powerStatus.textContent = device.status ? 'On' : 'Off';
+
+            // Update value if available
+            if (device.value !== undefined) {
+                const valueSlider = deviceElement.querySelector('.value-slider');
+                const valueDisplay = deviceElement.querySelector('.value-display');
+                const deviceValue = deviceElement.querySelector('.device-value');
+                
+                if (valueSlider) valueSlider.value = device.value;
+                if (valueDisplay) valueDisplay.textContent = device.value;
+                if (deviceValue) {
+                    deviceValue.textContent = `${device.value}${device.unit ? ' ' + device.unit : ''}`;
+                }
+            }
+
+            // Update brightness if available
+            const brightnessInput = deviceElement.querySelector('input[type="range"]');
+            const brightnessValue = deviceElement.querySelector('.brightness-value');
+            if (brightnessInput && brightnessValue && device.brightness !== undefined) {
+                brightnessInput.value = device.brightness;
+                brightnessValue.textContent = `${device.brightness}%`;
+            }
+
+            // Update temperature if available
+            const temperatureInput = deviceElement.querySelector('input[type="number"]');
+            if (temperatureInput && device.temperature !== undefined) {
+                temperatureInput.value = device.temperature;
+            }
+
+            // Update last seen
+            const lastSeen = deviceElement.querySelector('.device-last-seen');
+            lastSeen.textContent = device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : 'Never';
+        }
+
+        function updateDeviceData(deviceId, data) {
+            const device = devices.get(deviceId);
+            if (!device) return;
+
+            // Update device data if needed
+            console.log('Device data updated:', deviceId, data);
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.className = 'connection-status ' + (connected ? 'connected' : 'disconnected');
+            statusDiv.textContent = connected ? 'Connected' : 'Disconnected';
+        }
+
+        // Connect when the page loads
+        connect();
+    </script>
+</body>
+</html>

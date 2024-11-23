@@ -130,7 +130,7 @@ export abstract class BaseCrudService<T extends IBaseEntity, CreateDTO = DeepPar
         });
     }
 
-    async find(options?: IQueryOptions<T>, context?: ICsalContext): Promise<T[]> {
+    async findAll(options?: IQueryOptions<T>, context?: ICsalContext): Promise<T[]> {
         const { page, limit, search, ...findOptions } = options || {};
         const entities = await this.repository.find(findOptions);
 
@@ -266,7 +266,7 @@ export abstract class BaseCrudService<T extends IBaseEntity, CreateDTO = DeepPar
         context?: ICsalContext,
         options?: IBaseOptions,
     ): Promise<number> {
-        const entities = await this.find({ where: criteria }, context);
+        const entities = await this.findAll({ where: criteria }, context);
 
         await Promise.all(
             entities.map((entity) => this.checkUpdatePermission(entity, dto as UpdateDTO, context, options)),
@@ -314,7 +314,7 @@ export abstract class BaseCrudService<T extends IBaseEntity, CreateDTO = DeepPar
         context?: ICsalContext,
         options?: IBaseOptions,
     ): Promise<number> {
-        const entities = await this.find({ where: criteria }, context);
+        const entities = await this.findAll({ where: criteria }, context);
 
         await Promise.all(entities.map((entity) => this.checkDeletePermission(entity, context, options)));
 
@@ -352,7 +352,7 @@ export abstract class BaseCrudService<T extends IBaseEntity, CreateDTO = DeepPar
         context?: ICsalContext,
         options?: IBaseOptions,
     ): Promise<number> {
-        const entities = await this.find({ where: criteria, withDeleted: true }, context);
+        const entities = await this.findAll({ where: criteria, withDeleted: true }, context);
 
         await Promise.all(entities.map((entity) => this.checkDeletePermission(entity, context, options)));
 
@@ -374,7 +374,7 @@ export abstract class BaseCrudService<T extends IBaseEntity, CreateDTO = DeepPar
     }
 
     async restoreMany(criteria: FindOptionsWhere<T>, context?: ICsalContext, options?: IBaseOptions): Promise<number> {
-        const entities = await this.find({ where: criteria, withDeleted: true }, context);
+        const entities = await this.findAll({ where: criteria, withDeleted: true }, context);
 
         await Promise.all(entities.map((entity) => this.checkRestorePermission(entity, context, options)));
 
