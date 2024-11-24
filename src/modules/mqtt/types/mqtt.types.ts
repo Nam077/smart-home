@@ -34,9 +34,16 @@ export interface IBaseMessage {
     timestamp: string;
 }
 
+export interface IDeviceInfo {
+    ipAddress: string;
+    macAddress: string;
+    firmwareVersion?: string;
+}
+
 export interface ICommandMessage extends IBaseMessage {
     command: CommandTypeEnum;
     value?: any;
+    deviceInfo?: IDeviceInfo;
 }
 
 export interface IStatusMessage extends IBaseMessage {

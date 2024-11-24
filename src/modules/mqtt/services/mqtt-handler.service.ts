@@ -18,7 +18,14 @@ import {
     DeviceConfigControlDto,
     DeviceStatusResponseDto,
 } from '../dto/device-control.dto';
-import { TopicTypeEnum, CommandTypeEnum, ICommandMessage, IStatusMessage, IConfigMessage } from '../types/mqtt.types';
+import {
+    TopicTypeEnum,
+    CommandTypeEnum,
+    ICommandMessage,
+    IStatusMessage,
+    IConfigMessage,
+    IDeviceInfo,
+} from '../types/mqtt.types';
 
 @Injectable()
 export class MqttHandlerService {
@@ -319,6 +326,73 @@ export class MqttHandlerService {
             const now = new Date();
 
             switch (payload.command) {
+                case CommandTypeEnum.DEVICE_CONNECT: {
+                    console.log(`Device ${deviceId} connected`);
+                    console.log('Before update:', { isOnline: device.isOnline, isConnected: device.isConnected });
+
+                    // Extract and validate device info from payload
+                    if (!payload.deviceInfo?.ipAddress || !payload.deviceInfo?.macAddress) {
+                        throw new Error('Device info with ipAddress and macAddress is required for DEVICE_CONNECT');
+                    }
+
+                    const deviceInfo: IDeviceInfo = payload.deviceInfo;
+
+                    console.log('Received device info:', deviceInfo);
+
+                    // Update device information
+                    device.isOnline = true;
+                    device.isConnected = true;
+                    device.lastSeenAt = now;
+
+                    // Update device metadata
+                    device.ipAddress = deviceInfo.ipAddress;
+                    device.macAddress = deviceInfo.macAddress;
+
+                    if (deviceInfo.firmwareVersion) {
+                        device.firmwareVersion = deviceInfo.firmwareVersion;
+                    }
+
+                    await device.save();
+
+                    // Verify after save
+                    const updatedDevice = await this.deviceService.findById(deviceId);
+
+                    console.log('After update:', {
+                        isOnline: updatedDevice.isOnline,
+                        isConnected: updatedDevice.isConnected,
+                        ipAddress: updatedDevice.ipAddress,
+                        macAddress: updatedDevice.macAddress,
+                        firmwareVersion: updatedDevice.firmwareVersion,
+                    });
+
+                    // Prepare status message with full device info
+                    const statusMessage = {
+                        ...(await this.deviceService.findById(deviceId)),
+                    };
+
+                    console.log('Status message to send:', statusMessage);
+
+                    // Publish updated device status
+                    await this.mqttPublisher.publish({
+                        topic: `home/${device.room.id}/${deviceId}/status`,
+                        payload: JSON.stringify(statusMessage),
+                        qos: 0,
+                        retain: false,
+                    });
+
+                    return device;
+                }
+
+                case CommandTypeEnum.DEVICE_DISCONNECT: {
+                    console.log(`Device ${deviceId} disconnected`);
+                    device.isOnline = false;
+                    device.isConnected = false;
+                    device.lastSeenAt = now;
+                    await device.save();
+
+                    return device;
+                }
+
                 case CommandTypeEnum.SET_STATUS:
                     dto = plainToClass(DeviceStatusControlDto, {
                         ...payload,
@@ -433,52 +507,6 @@ export class MqttHandlerService {
                 case CommandTypeEnum.TURN_OFF_ALL:
                     // These are broadcast commands, should be handled by handleBroadcast
                     throw new Error(`Broadcast command ${payload.command} cannot be handled by device control`);
-
-                case CommandTypeEnum.DEVICE_CONNECT: {
-                    console.log(`Device ${deviceId} connected`);
-                    console.log('Before update:', { isOnline: device.isOnline, isConnected: device.isConnected });
-
-                    device.isOnline = true;
-                    device.lastSeenAt = now;
-                    await device.save();
-
-                    // Verify after save
-                    const updatedDevice = await this.deviceService.findById(deviceId);
-
-                    console.log('After update:', {
-                        isOnline: updatedDevice.isOnline,
-                        isConnected: updatedDevice.isConnected,
-                    });
-
-                    // Gửi device info để cập nhật UI
-                    const deviceInfo = {
-                        status: device.status,
-                        value: device.value,
-                        brightness: device.brightness,
-                        temperature: device.temperature,
-                        isOnline: device.isOnline,
-                        lastSeenAt: device.lastSeenAt,
-                        timestamp: now.toISOString(),
-                    };
-
-                    console.log('Device info to send:', deviceInfo);
-
-                    await this.mqttPublisher.publish({
-                        topic: `home/${device.room.id}/${deviceId}/status`,
-                        payload: JSON.stringify(deviceInfo),
-                        qos: 0,
-                        retain: false,
-                    });
-
-                    return device;
-                }
-
-                case CommandTypeEnum.DEVICE_DISCONNECT:
-                    device.isOnline = false;
-                    device.lastSeenAt = now;
-                    await device.save();
-
-                    return device;
 
                 default: {
                     // This ensures we handle all cases in CommandTypeEnum
