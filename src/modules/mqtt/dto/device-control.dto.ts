@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from 'class-validator';
 
 import { CommandTypeEnum } from '../types/mqtt.types';
 
@@ -105,4 +105,27 @@ export class DeviceStatusResponseDto {
 
     @IsBoolean()
     isConnected: boolean;
+}
+
+export class ColorValueDto {
+    @IsNumber()
+    @Min(0)
+    @Max(255)
+    r: number;
+
+    @IsNumber()
+    @Min(0)
+    @Max(255)
+    g: number;
+
+    @IsNumber()
+    @Min(0)
+    @Max(255)
+    b: number;
+}
+
+export class DeviceColorControlDto extends DeviceControlBaseDto {
+    @ValidateNested()
+    @Type(() => ColorValueDto)
+    value: ColorValueDto;
 }

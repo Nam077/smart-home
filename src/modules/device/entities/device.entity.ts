@@ -99,6 +99,13 @@ export class Device extends BaseEntity implements IBaseEntity {
     @Column({ default: false })
     isConnected: boolean;
 
+    @Column({ type: 'json', nullable: true })
+    color?: {
+        r: number;
+        g: number;
+        b: number;
+    };
+
     @Column({ type: 'text', nullable: true })
     lastError?: string;
 

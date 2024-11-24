@@ -17,6 +17,7 @@ import {
     DeviceSpeedControlDto,
     DeviceConfigControlDto,
     DeviceStatusResponseDto,
+    DeviceColorControlDto,
 } from '../dto/device-control.dto';
 import {
     TopicTypeEnum,
@@ -491,6 +492,15 @@ export class MqttHandlerService {
                     break;
                 }
 
+                case CommandTypeEnum.SET_COLOR:
+                    dto = plainToClass(DeviceColorControlDto, payload);
+                    device.color = {
+                        ...device.color,
+                        ...dto.value,
+                        timestamp: now.toISOString(),
+                    };
+                    break;
+
                 case CommandTypeEnum.GET_STATUS:
                     // Just return current device state
                     break;
@@ -510,7 +520,7 @@ export class MqttHandlerService {
 
                 default: {
                     // This ensures we handle all cases in CommandTypeEnum
-                    const exhaustiveCheck: never = payload.command;
+                    const exhaustiveCheck = payload.command;
 
                     throw new Error(`Unsupported command: ${exhaustiveCheck}`);
                 }
