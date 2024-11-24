@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsIP, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
-import { DeviceTypeEnum } from '../entities/device.entity';
+import { DeviceFunctionEnum, DeviceTypeEnum } from '../entities/device.entity';
 
 export class CreateDeviceDto {
     @ApiProperty({
@@ -19,6 +19,24 @@ export class CreateDeviceDto {
     })
     @IsEnum(DeviceTypeEnum)
     type: DeviceTypeEnum;
+
+    @ApiProperty({
+        description: 'Device function',
+        enum: DeviceFunctionEnum,
+        example: DeviceFunctionEnum.RELAY,
+        default: DeviceFunctionEnum.RELAY,
+    })
+    @IsEnum(DeviceFunctionEnum)
+    function: DeviceFunctionEnum;
+
+    @ApiProperty({
+        description: 'Control pin (GPIO)',
+        example: 'GPIO18',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    controlPin?: string;
 
     @ApiProperty({
         description: 'Device status',
@@ -56,6 +74,74 @@ export class CreateDeviceDto {
     @IsString()
     @IsOptional()
     description?: string;
+
+    @ApiProperty({
+        description: 'Device location',
+        example: 'Living Room Corner',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    location?: string;
+
+    @ApiProperty({
+        description: 'Device brightness (0-100)',
+        example: 50,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    brightness?: number;
+
+    @ApiProperty({
+        description: 'Device manufacturer',
+        example: 'Sonoff',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    manufacturer?: string;
+
+    @ApiProperty({
+        description: 'Device model',
+        example: 'Basic R2',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    model?: string;
+
+    @ApiProperty({
+        description: 'Device serial number',
+        example: 'SN123456789',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    serialNumber?: string;
+
+    @ApiProperty({
+        description: 'Room ID',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+    })
+    @IsUUID()
+    roomId: string;
+
+    @ApiProperty({
+        description: 'Controller ID',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+        required: false,
+    })
+    @IsUUID()
+    @IsOptional()
+    controllerId?: string;
+
+    @ApiProperty({
+        description: 'User ID who owns this device',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+    })
+    @IsUUID()
+    userId: string;
 
     @ApiProperty({
         description: 'Device IP address',
@@ -111,29 +197,4 @@ export class CreateDeviceDto {
     @IsBoolean()
     @IsOptional()
     isOnline?: boolean;
-
-    @ApiProperty({
-        description: 'Device location',
-        example: 'Living Room',
-        required: false,
-    })
-    @IsString()
-    @IsOptional()
-    location?: string;
-
-    @ApiProperty({
-        description: 'User ID who owns this device',
-        example: '123e4567-e89b-12d3-a456-426614174000',
-    })
-    @IsUUID()
-    userId: string;
-
-    @ApiProperty({
-        description: 'Room ID where this device is located',
-        example: '123e4567-e89b-12d3-a456-426614174000',
-        required: false,
-    })
-    @IsUUID()
-    @IsOptional()
-    roomId?: string;
 }

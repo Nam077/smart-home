@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Device Control</title>
+    <!-- React CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <!-- MQTT Client -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <!-- Same CSS as before -->
+    <style>
+        /* Your existing CSS styles here */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        /* ... rest of your CSS ... */
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // MQTT Configuration
+        const mqttConfig = {
+            host: 'localhost',
+            port: 8883,
+            username: 'smarthome',
+            password: 'smarthome123',
+            useSSL: false,
+            keepAliveInterval: 60
+        };
+
+        // App Component
+        function App() {
+            const [devices, setDevices] = React.useState([]);
+            const [controllerId, setControllerId] = React.useState('');
+            const [connectionStatus, setConnectionStatus] = React.useState(false);
+            const [client, setClient] = React.useState(null);
+            const [messages, setMessages] = React.useState([]);
+
+            // MQTT Connection Functions
+            const connect = React.useCallback(() => {
+                if (client && client.isConnected()) {
+                    client.disconnect();
+                }
+
+                const clientId = "web_" + Math.random().toString(16).substr(2, 8);
+                const newClient = new Paho.MQTT.Client(mqttConfig.host, mqttConfig.port, clientId);
+
+                newClient.onConnectionLost = (responseObject) => {
+                    if (responseObject.errorCode !== 0) {
+                        console.error('MQTT Connection lost:', responseObject.errorMessage);
+                        setConnectionStatus(false);
+                        setTimeout(connect, 5000);
+                    }
+                };
+
+                newClient.onMessageArrived = (message) => {
+                    const topic = message.destinationName;
+                    const payload = JSON.parse(message.payloadString);
+                    
+                    setMessages(prev => [{
+                        timestamp: new Date().toLocaleTimeString(),
+                        topic,
+                        payload: JSON.stringify(payload, null, 2)
+                    }, ...prev]);
+
+                    // Handle message updates
+                    const topicParts = topic.split('/');
+                    const deviceId = topicParts[2];
+
+                    if (topic.endsWith('/status')) {
+                        handleStatusUpdate(deviceId, payload);
+                    } else if (topic.endsWith('/control')) {
+                        handleControlUpdate(deviceId, payload);
+                    }
+                };
+
+                const options = {
+                    onSuccess: () => {
+                        console.log('Connected to MQTT broker');
+                        setConnectionStatus(true);
+                        devices.forEach(device => subscribeToDeviceTopics(device.id, newClient));
+                    },
+                    onFailure: (error) => {
+                        console.error('Failed to connect to MQTT broker:', error);
+                        setConnectionStatus(false);
+                        setTimeout(connect, 5000);
+                    },
+                    userName: mqttConfig.username,
+                    password: mqttConfig.password,
+                    useSSL: mqttConfig.useSSL,
+                    keepAliveInterval: mqttConfig.keepAliveInterval,
+                    cleanSession: true,
+                    timeout: 3
+                };
+
+                try {
+                    newClient.connect(options);
+                    setClient(newClient);
+                } catch (error) {
+                    console.error('MQTT Connection error:', error);
+                    setConnectionStatus(false);
+                }
+            }, [devices]);
+
+            React.useEffect(() => {
+                connect();
+                return () => {
+                    if (client && client.isConnected()) {
+                        client.disconnect();
+                    }
+                };
+            }, []);
+
+            const loadDevices = async () => {
+                if (!controllerId) {
+                    alert('Please enter a Controller ID');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`http://localhost:3000/devices/controller/${controllerId}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    setDevices(result.data);
+                    connect();
+                } catch (error) {
+                    console.error('Error loading devices:', error);
+                    alert('Error loading devices. Please check the Controller ID and try again.');
+                }
+            };
+
+            const publishCommand = (deviceId, command, value) => {
+                if (!client || !client.isConnected()) {
+                    console.error('MQTT Client not connected');
+                    alert('Not connected to MQTT broker');
+                    return;
+                }
+
+                const device = devices.find(d => d.id === deviceId);
+                if (!device) return;
+
+                const topic = `home/${device.roomId}/${deviceId}/control`;
+                const message = new Paho.MQTT.Message(JSON.stringify({
+                    command: command,
+                    value: value,
+                    timestamp: new Date().toISOString()
+                }));
+                message.destinationName = topic;
+
+                try {
+                    client.send(message);
+                } catch (error) {
+                    console.error('Error publishing command:', error);
+                }
+            };
+
+            // Components
+            const DeviceCard = ({ device }) => {
+                const togglePower = () => {
+                    publishCommand(device.id, 'set_status', !device.status);
+                };
+
+                const updateValue = (value) => {
+                    publishCommand(device.id, 'set_value', parseInt(value));
+                };
+
+                return (
+                    <div className="device-card">
+                        <div className="device-header">
+                            <h2>{device.name}</h2>
+                            <span className={`device-status ${device.isOnline ? 'online' : 'offline'}`}>
+                                {device.isOnline ? 'Online' : 'Offline'}
+                            </span>
+                        </div>
+                        <div className="device-info">
+                            <p>Type: {device.type}</p>
+                            <p>Function: {device.function}</p>
+                            <p>Location: {device.location || 'N/A'}</p>
+                        </div>
+                        <div className="control-group">
+                            <label>Power Control</label>
+                            <label className="switch">
+                                <input
+                                    type="checkbox"
+                                    checked={device.status}
+                                    onChange={togglePower}
+                                />
+                                <span className="slider"></span>
+                            </label>
+                            <span className={`power-status ${device.status ? 'on' : 'off'}`}>
+                                {device.status ? 'ON' : 'OFF'}
+                            </span>
+                        </div>
+                        {device.value !== null && (
+                            <div className="control-group">
+                                <label>Value Control</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={device.value || 0}
+                                    onChange={(e) => updateValue(e.target.value)}
+                                />
+                                <span>{device.value || 0}{device.unit || ''}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <h1>Smart Home Device Control</h1>
+                        <div className={`connection-status ${connectionStatus ? 'connected' : 'disconnected'}`}>
+                            {connectionStatus ? 'Connected' : 'Disconnected'}
+                        </div>
+                        <div className="controller-select">
+                            <label htmlFor="controllerId">Select Controller:</label>
+                            <input
+                                type="text"
+                                id="controllerId"
+                                value={controllerId}
+                                onChange={(e) => setControllerId(e.target.value)}
+                                placeholder="Enter Controller ID"
+                            />
+                            <button onClick={loadDevices}>Load Devices</button>
+                        </div>
+                    </div>
+                    <div id="deviceList">
+                        {devices.map(device => (
+                            <DeviceCard key={device.id} device={device} />
+                        ))}
+                    </div>
+                    <div className="message-box">
+                        <h3>Message Log</h3>
+                        <div id="messageLog">
+                            {messages.map((msg, index) => (
+                                <div key={index} className="message-log-entry">
+                                    <span className="timestamp">[{msg.timestamp}]</span>
+                                    <span className="topic">{msg.topic}</span>
+                                    <br />
+                                    <span className="payload">{msg.payload}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

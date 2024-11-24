@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Control Panel</title>
+    
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    
+    <!-- Material UI -->
+    <script src="https://unpkg.com/@mui/material@5.14.13/umd/material-ui.production.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    
+    <!-- MQTT Client -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        .device-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .device-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            margin: 15px 0;
+        }
+
+        .connection-status {
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .connection-status.connected {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .message-log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .message-log-entry {
+            padding: 5px;
+            border-bottom: 1px solid #dee2e6;
+            font-family: monospace;
+        }
+
+        .device-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .device-status.online {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .device-status.offline {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { 
+            Button, Card, CardContent, Typography, Slider, Switch,
+            FormControl, InputLabel, Select, MenuItem, TextField,
+            AppBar, Toolbar, IconButton, Box, Grid, Paper,
+            CircularProgress, Alert, Snackbar
+        } = MaterialUI;
+
+        function App() {
+            const [devices, setDevices] = React.useState([]);
+            const [controllers, setControllers] = React.useState([]);
+            const [selectedController, setSelectedController] = React.useState('');
+            const [connected, setConnected] = React.useState(false);
+            const [loading, setLoading] = React.useState(true);
+            const [error, setError] = React.useState(null);
+            const clientRef = React.useRef(null);
+
+            React.useEffect(() => {
+                fetchControllers();
+            }, []);
+
+            const fetchControllers = async () => {
+                try {
+                    const response = await fetch('/api/controllers');
+                    const data = await response.json();
+                    setControllers(data);
+                    if (data.length > 0) {
+                        setSelectedController(data[0].id);
+                        fetchDevices(data[0].id);
+                    }
+                } catch (err) {
+                    setError('Failed to fetch controllers');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const fetchDevices = async (controllerId) => {
+                try {
+                    const response = await fetch(`/api/devices/controller/${controllerId}`);
+                    const data = await response.json();
+                    setDevices(data);
+                    if (!clientRef.current) {
+                        connectMqtt();
+                    }
+                } catch (err) {
+                    setError('Failed to fetch devices');
+                }
+            };
+
+            const connectMqtt = () => {
+                const client = new Paho.MQTT.Client(
+                    window.location.hostname,
+                    8883,
+                    `web_${Math.random().toString(16).substr(2, 8)}`
+                );
+
+                client.onConnectionLost = onConnectionLost;
+                client.onMessageArrived = onMessageArrived;
+
+                const options = {
+                    onSuccess: onConnect,
+                    onFailure: onConnectFailure,
+                    userName: 'smarthome',
+                    password: 'smarthome123',
+                    useSSL: false,
+                    keepAliveInterval: 60,
+                    cleanSession: true,
+                    timeout: 3
+                };
+
+                try {
+                    client.connect(options);
+                    clientRef.current = client;
+                } catch (err) {
+                    setError('Failed to connect to MQTT broker');
+                }
+            };
+
+            const onConnect = () => {
+                setConnected(true);
+                setError(null);
+                devices.forEach(device => subscribeToDeviceTopics(device.id));
+            };
+
+            const onConnectFailure = (error) => {
+                setConnected(false);
+                setError(`Failed to connect: ${error.errorMessage}`);
+            };
+
+            const onConnectionLost = (responseObject) => {
+                setConnected(false);
+                if (responseObject.errorCode !== 0) {
+                    setError(`Connection lost: ${responseObject.errorMessage}`);
+                }
+            };
+
+            const onMessageArrived = (message) => {
+                const topic = message.destinationName;
+                const payload = JSON.parse(message.payloadString);
+                const topicParts = topic.split('/');
+                const deviceId = topicParts[2];
+                
+                updateDeviceStatus(deviceId, payload);
+            };
+
+            const updateDeviceStatus = (deviceId, status) => {
+                setDevices(prevDevices => 
+                    prevDevices.map(device => 
+                        device.id === deviceId 
+                            ? { ...device, ...status }
+                            : device
+                    )
+                );
+            };
+
+            const publishCommand = (deviceId, command, value) => {
+                if (!clientRef.current?.isConnected()) {
+                    setError('MQTT Client not connected');
+                    return;
+                }
+
+                const device = devices.find(d => d.id === deviceId);
+                if (!device) return;
+
+                const topic = `home/${device.roomId}/${deviceId}/control`;
+                const message = new Paho.MQTT.Message(JSON.stringify({
+                    command,
+                    value,
+                    timestamp: new Date().toISOString()
+                }));
+                message.destinationName = topic;
+
+                try {
+                    clientRef.current.send(message);
+                } catch (err) {
+                    setError(`Failed to send command: ${err.message}`);
+                }
+            };
+
+            const subscribeToDeviceTopics = (deviceId) => {
+                if (!clientRef.current?.isConnected()) return;
+
+                const device = devices.find(d => d.id === deviceId);
+                if (!device) return;
+
+                const statusTopic = `home/${device.roomId}/${deviceId}/status`;
+                const controlTopic = `home/${device.roomId}/${deviceId}/control`;
+
+                try {
+                    clientRef.current.subscribe(statusTopic);
+                    clientRef.current.subscribe(controlTopic);
+                } catch (err) {
+                    setError(`Failed to subscribe: ${err.message}`);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+                        <CircularProgress />
+                    </Box>
+                );
+            }
+
+            return (
+                <Box sx={{ flexGrow: 1 }}>
+                    <AppBar position="static">
+                        <Toolbar>
+                            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                                Smart Home Control Panel
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Typography variant="body2" sx={{ mr: 2 }}>
+                                    Status: {connected ? 'Connected' : 'Disconnected'}
+                                </Typography>
+                                {connected ? (
+                                    <IconButton color="inherit">
+                                        <span className="material-icons">wifi</span>
+                                    </IconButton>
+                                ) : (
+                                    <IconButton color="inherit">
+                                        <span className="material-icons">wifi_off</span>
+                                    </IconButton>
+                                )}
+                            </Box>
+                        </Toolbar>
+                    </AppBar>
+
+                    <Box sx={{ p: 3 }}>
+                        <FormControl fullWidth sx={{ mb: 3 }}>
+                            <InputLabel>Controller</InputLabel>
+                            <Select
+                                value={selectedController}
+                                onChange={(e) => {
+                                    setSelectedController(e.target.value);
+                                    fetchDevices(e.target.value);
+                                }}
+                            >
+                                {controllers.map(controller => (
+                                    <MenuItem key={controller.id} value={controller.id}>
+                                        {controller.name}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+
+                        <Grid container spacing={3}>
+                            {devices.map(device => (
+                                <Grid item xs={12} sm={6} md={4} key={device.id}>
+                                    <DeviceCard
+                                        device={device}
+                                        onCommand={publishCommand}
+                                    />
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </Box>
+
+                    <Snackbar 
+                        open={!!error} 
+                        autoHideDuration={6000} 
+                        onClose={() => setError(null)}
+                    >
+                        <Alert severity="error" onClose={() => setError(null)}>
+                            {error}
+                        </Alert>
+                    </Snackbar>
+                </Box>
+            );
+        }
+
+        function DeviceCard({ device, onCommand }) {
+            const getControls = () => {
+                const controls = [];
+
+                // Power Control
+                controls.push(
+                    <Box key="power" sx={{ mb: 2 }}>
+                        <Typography component="div">
+                            Power
+                            <Switch
+                                checked={device.status}
+                                onChange={(e) => onCommand(device.id, 'set_status', e.target.checked)}
+                            />
+                        </Typography>
+                    </Box>
+                );
+
+                // Value Control
+                if (device.value !== null) {
+                    controls.push(
+                        <Box key="value" sx={{ mb: 2 }}>
+                            <Typography gutterBottom>Value</Typography>
+                            <Slider
+                                value={device.value}
+                                onChange={(_, value) => onCommand(device.id, 'set_value', value)}
+                                valueLabelDisplay="auto"
+                            />
+                        </Box>
+                    );
+                }
+
+                // Brightness Control
+                if (device.brightness !== null) {
+                    controls.push(
+                        <Box key="brightness" sx={{ mb: 2 }}>
+                            <Typography gutterBottom>Brightness</Typography>
+                            <Slider
+                                value={device.brightness}
+                                onChange={(_, value) => onCommand(device.id, 'set_brightness', value)}
+                                valueLabelDisplay="auto"
+                            />
+                        </Box>
+                    );
+                }
+
+                // Speed Control
+                if (device.speed !== null) {
+                    controls.push(
+                        <Box key="speed" sx={{ mb: 2 }}>
+                            <Typography gutterBottom>Speed</Typography>
+                            <Slider
+                                value={device.speed}
+                                onChange={(_, value) => onCommand(device.id, 'set_speed', value)}
+                                valueLabelDisplay="auto"
+                            />
+                        </Box>
+                    );
+                }
+
+                // Temperature Control
+                if (device.temperature !== null) {
+                    controls.push(
+                        <Box key="temperature" sx={{ mb: 2 }}>
+                            <Typography gutterBottom>Temperature</Typography>
+                            <Slider
+                                value={device.temperature}
+                                min={16}
+                                max={30}
+                                onChange={(_, value) => onCommand(device.id, 'set_temperature', value)}
+                                valueLabelDisplay="auto"
+                            />
+                        </Box>
+                    );
+                }
+
+                // RGB Control
+                if (device.function?.toUpperCase() === 'RGB') {
+                    controls.push(
+                        <Box key="rgb" sx={{ mb: 2 }}>
+                            <Typography gutterBottom>Color</Typography>
+                            <input
+                                type="color"
+                                value={device.value || '#000000'}
+                                onChange={(e) => onCommand(device.id, 'set_rgb', e.target.value)}
+                                style={{ width: '100%', height: 40 }}
+                            />
+                        </Box>
+                    );
+                }
+
+                return controls;
+            };
+
+            return (
+                <Card>
+                    <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                            <Typography variant="h6" component="div">
+                                {device.name}
+                            </Typography>
+                            <Typography 
+                                component="div" 
+                                className={`device-status ${device.isOnline ? 'online' : 'offline'}`}
+                            >
+                                {device.isOnline ? 'Online' : 'Offline'}
+                            </Typography>
+                        </Box>
+                        <Typography color="text.secondary" gutterBottom>
+                            {device.description}
+                        </Typography>
+                        {getControls()}
+                    </CardContent>
+                </Card>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

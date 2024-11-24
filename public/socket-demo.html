@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home WebSocket Demo</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .device {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.off {
+            background: #f44336;
+        }
+        button.off:hover {
+            background: #da190b;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected {
+            background: #dff0d8;
+            color: #3c763d;
+        }
+        .disconnected {
+            background: #f2dede;
+            color: #a94442;
+        }
+        .control-panel {
+            margin-top: 10px;
+            padding: 10px;
+            border-top: 1px solid #eee;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        input[type="range"], input[type="number"] {
+            width: 150px;
+            margin: 0 10px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .success-message {
+            color: #4CAF50;
+            margin: 5px 0;
+        }
+        .error-message {
+            color: #f44336;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Home WebSocket Demo</h1>
+    
+    <div class="container">
+        <div id="status" class="disconnected">Disconnected</div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+
+    <div class="container">
+        <h2>Room Devices</h2>
+        <input type="text" id="roomId" placeholder="Enter Room ID">
+        <button onclick="joinRoom()">Join Room</button>
+        <div id="devices"></div>
+    </div>
+
+    <script>
+        let socket;
+        let currentDevices = new Map();
+
+        function connect() {
+            socket = io('http://localhost:3000', {
+                transports: ['websocket'],
+                autoConnect: false
+            });
+
+            socket.on('connect', () => {
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'connected';
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'disconnected';
+            });
+
+            socket.on('room:devices', (data) => {
+                const devicesDiv = document.getElementById('devices');
+                devicesDiv.innerHTML = '';
+                currentDevices.clear();
+                
+                data.devices.forEach(device => {
+                    currentDevices.set(device.id, device);
+                    const deviceElement = document.createElement('div');
+                    deviceElement.className = 'device';
+                    deviceElement.innerHTML = `
+                        <h3>${device.name}</h3>
+                        <p>Status: <span id="status-${device.id}">${device.status ? 'ON' : 'OFF'}</span></p>
+                        <div class="control-panel">
+                            <div class="control-group">
+                                <button onclick="toggleDevice('${device.id}')" class="${device.status ? '' : 'off'}" id="toggle-${device.id}">
+                                    ${device.status ? 'Turn OFF' : 'Turn ON'}
+                                </button>
+                            </div>
+                            <div class="control-group">
+                                <label>Brightness:</label>
+                                <input type="range" min="0" max="100" value="${device.brightness || 0}"
+                                    onchange="updateBrightness('${device.id}', this.value)" id="brightness-${device.id}">
+                                <input type="number" min="0" max="100" value="${device.brightness || 0}"
+                                    onchange="updateBrightness('${device.id}', this.value)" id="brightness-number-${device.id}">
+                            </div>
+                            <div class="control-group">
+                                <label>Temperature:</label>
+                                <input type="range" min="0" max="40" value="${device.temperature || 20}"
+                                    onchange="updateTemperature('${device.id}', this.value)" id="temperature-${device.id}">
+                                <input type="number" min="0" max="40" value="${device.temperature || 20}"
+                                    onchange="updateTemperature('${device.id}', this.value)" id="temperature-number-${device.id}">
+                                <span>°C</span>
+                            </div>
+                            <div class="control-group">
+                                <label>Value:</label>
+                                <input type="range" min="0" max="100" value="${device.value || 0}"
+                                    onchange="updateValue('${device.id}', this.value)" id="value-${device.id}">
+                                <input type="number" min="0" max="100" value="${device.value || 0}"
+                                    onchange="updateValue('${device.id}', this.value)" id="value-number-${device.id}">
+                                ${device.unit ? `<span>${device.unit}</span>` : ''}
+                            </div>
+                        </div>
+                    `;
+                    devicesDiv.appendChild(deviceElement);
+                });
+            });
+
+            socket.on('device:control:success', (data) => {
+                const device = currentDevices.get(data.deviceId);
+                if (device) {
+                    console.log('Control success:', data);
+                }
+            });
+
+            socket.on('device:control:error', (data) => {
+                console.error('Control error:', data);
+            });
+
+            socket.connect();
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+            }
+        }
+
+        function joinRoom() {
+            const roomId = document.getElementById('roomId').value;
+            if (socket && roomId) {
+                socket.emit('room:subscribe', roomId);
+            }
+        }
+
+        function toggleDevice(deviceId) {
+            const device = currentDevices.get(deviceId);
+            if (device) {
+                const newStatus = !device.status;
+                socket.emit('device:control', {
+                    deviceId: deviceId,
+                    type: 'toggle',
+                    status: newStatus
+                });
+                
+                // Optimistic UI update
+                device.status = newStatus;
+                document.getElementById(`status-${deviceId}`).textContent = newStatus ? 'ON' : 'OFF';
+                document.getElementById(`toggle-${deviceId}`).textContent = newStatus ? 'Turn OFF' : 'Turn ON';
+                document.getElementById(`toggle-${deviceId}`).className = newStatus ? '' : 'off';
+            }
+        }
+
+        function updateBrightness(deviceId, value) {
+            const device = currentDevices.get(deviceId);
+            if (device) {
+                const numValue = Number(value);
+                socket.emit('device:control', {
+                    deviceId: deviceId,
+                    type: 'brightness',
+                    brightness: numValue
+                });
+
+                // Update both slider and number input
+                document.getElementById(`brightness-${deviceId}`).value = numValue;
+                document.getElementById(`brightness-number-${deviceId}`).value = numValue;
+                
+                // Update stored device value
+                device.brightness = numValue;
+            }
+        }
+
+        function updateTemperature(deviceId, value) {
+            const device = currentDevices.get(deviceId);
+            if (device) {
+                const numValue = Number(value);
+                socket.emit('device:control', {
+                    deviceId: deviceId,
+                    type: 'temperature',
+                    temperature: numValue
+                });
+
+                // Update both slider and number input
+                document.getElementById(`temperature-${deviceId}`).value = numValue;
+                document.getElementById(`temperature-number-${deviceId}`).value = numValue;
+                
+                // Update stored device value
+                device.temperature = numValue;
+            }
+        }
+
+        function updateValue(deviceId, value) {
+            const device = currentDevices.get(deviceId);
+            if (device) {
+                const numValue = Number(value);
+                socket.emit('device:control', {
+                    deviceId: deviceId,
+                    type: 'value',
+                    value: numValue
+                });
+
+                // Update both slider and number input
+                document.getElementById(`value-${deviceId}`).value = numValue;
+                document.getElementById(`value-number-${deviceId}`).value = numValue;
+                document.getElementById(`value-${deviceId}`).textContent = numValue;
+                
+                // Update stored device value
+                device.value = numValue;
+            }
+        }
+    </script>
+</body>
+</html>

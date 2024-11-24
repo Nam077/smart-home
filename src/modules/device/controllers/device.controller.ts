@@ -57,6 +57,18 @@ export class DeviceController {
         return this.deviceService.findById(id);
     }
 
+    @Get('room/:roomId')
+    @ApiOperation({ summary: 'Get devices by room id' })
+    findByRoomId(@Param('roomId', ParseUUIDPipe) roomId: string) {
+        return this.deviceService.findByRoomId(roomId);
+    }
+
+    @Get('controller/:controllerId')
+    @ApiOperation({ summary: 'Get devices by controller id' })
+    findByControllerId(@Param('controllerId', ParseUUIDPipe) controllerId: string) {
+        return this.deviceService.findByControllerId(controllerId);
+    }
+
     @Patch(':id')
     @ApiOperation({ summary: 'Update device by ID' })
     @ApiParam({ name: 'id', description: 'Device ID', type: String, format: 'uuid' })

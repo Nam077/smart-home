@@ -5,8 +5,8 @@ import * as compression from 'compression';
 import helmet from 'helmet';
 
 import { AppModule } from './app.module';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { ErrorInterceptor } from './common/interceptors/error.interceptor';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 /**
  * Starts the application.
@@ -23,10 +23,7 @@ async function bootstrap() {
     );
 
     // Global interceptors
-    app.useGlobalInterceptors(
-        new TransformInterceptor(),
-        new ErrorInterceptor(),
-    );
+    app.useGlobalInterceptors(new TransformInterceptor(), new ErrorInterceptor());
 
     // Security
     app.use(helmet());

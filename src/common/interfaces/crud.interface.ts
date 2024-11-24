@@ -57,7 +57,7 @@ export interface ICrudService<T extends IBaseEntity, CreateDTO = DeepPartial<T>,
     create: (dto: CreateDTO, context?: ICsalContext, options?: IBaseOptions) => Promise<T>;
     createMany: (dtos: CreateDTO[], context?: ICsalContext, options?: IBaseOptions) => Promise<T[]>;
 
-    find: (options?: IQueryOptions<T>, context?: ICsalContext) => Promise<T[]>;
+    findAll: (options?: IQueryOptions<T>, context?: ICsalContext) => Promise<T[]>;
     findWithPagination: (paginationDto: PaginationDto, context?: ICsalContext) => Promise<IPaginatedResponse<T>>;
     findById: (id: string, options?: IFindOneOptions<T>, context?: ICsalContext) => Promise<T>;
     findOne: (options: IFindOneOptions<T>, context?: ICsalContext) => Promise<T>;
