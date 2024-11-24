@@ -63,6 +63,8 @@ export class MqttHeartbeatService implements OnModuleInit {
     }
 
     async handleHeartbeatResponse(deviceId: string, timestamp: string): Promise<void> {
+        console.log('Heartbeat response received:', deviceId, timestamp);
+
         try {
             const device = await this.deviceService.findById(deviceId);
 
@@ -72,7 +74,6 @@ export class MqttHeartbeatService implements OnModuleInit {
                 return;
             }
 
-            device.isOnline = true;
             device.lastSeenAt = new Date();
             await device.save();
 

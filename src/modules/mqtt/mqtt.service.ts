@@ -10,10 +10,19 @@ import { startsWith, replace } from 'lodash';
 import { Device } from '@app/modules/device/entities/device.entity';
 import { DeviceService } from '@app/modules/device/services/device.service';
 
-import { DeviceControlDto } from './dto/device-control.dto';
+import {
+    DeviceControlBaseDto,
+    DeviceStatusControlDto,
+    DeviceValueControlDto,
+    DeviceBrightnessControlDto,
+    DeviceTemperatureControlDto,
+    DeviceSpeedControlDto,
+    DeviceConfigControlDto,
+} from './dto/device-control.dto';
 import { IMqttPublisher } from './interfaces/mqtt-publisher.interface';
 import { MqttHandlerService } from './services/mqtt-handler.service';
 import { MqttPublisherService } from './services/mqtt-publisher.service';
+import { CommandTypeEnum } from './types/mqtt.types';
 
 interface IAuthenticateError extends Error {
     returnCode: number;
@@ -147,10 +156,6 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
             device.isConnected = isConnected;
             device.lastSeenAt = new Date();
 
-            if (!isConnected) {
-                device.isOnline = false;
-            }
-
             await device.save();
             this.logger.debug(`Updated device ${deviceId} connection status: ${isConnected}`);
         } catch (error) {
@@ -172,7 +177,38 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
         return this.mqttPublisher.publish(packet);
     }
 
-    async publishControl(deviceId: string, command: DeviceControlDto): Promise<void> {
-        await this.publishToDevice(deviceId, 'control', command);
+    async publishControl(deviceId: string, command: DeviceControlBaseDto): Promise<void> {
+        const roomId = await this.deviceService.getRoomIdByDeviceId(deviceId);
+
+        if (!roomId) {
+            throw new Error(`Device ${deviceId} not found or not associated with any room`);
+        }
+
+        let payload: any;
+
+        switch (command.command) {
+            case CommandTypeEnum.SET_STATUS:
+                payload = command as DeviceStatusControlDto;
+                break;
+            case CommandTypeEnum.SET_VALUE:
+                payload = command as DeviceValueControlDto;
+                break;
+            case CommandTypeEnum.SET_BRIGHTNESS:
+                payload = command as DeviceBrightnessControlDto;
+                break;
+            case CommandTypeEnum.SET_TEMPERATURE:
+                payload = command as DeviceTemperatureControlDto;
+                break;
+            case CommandTypeEnum.SET_SPEED:
+                payload = command as DeviceSpeedControlDto;
+                break;
+            case CommandTypeEnum.UPDATE_CONFIG:
+                payload = command as DeviceConfigControlDto;
+                break;
+            default:
+                throw new Error(`Unsupported command type: ${command.command}`);
+        }
+
+        await this.mqttPublisher.publishToDevice(roomId, deviceId, command.command, payload.value);
     }
 }

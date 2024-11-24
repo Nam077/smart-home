@@ -9,6 +9,7 @@ import {
     UpdateDateColumn,
 } from 'typeorm';
 
+import { Controller } from '@app/modules/controller/entities/controller.entity';
 import { Room } from '@app/modules/room/entities/room.entity';
 import { IBaseEntity } from '@interfaces/crud.interface';
 import { User } from '@modules/user/entities/user.entity';
@@ -16,6 +17,13 @@ import { User } from '@modules/user/entities/user.entity';
 export enum DeviceTypeEnum {
     SENSOR = 'sensor',
     ACTUATOR = 'actuator',
+}
+
+export enum DeviceFunctionEnum {
+    RELAY = 'relay',
+    SENSOR = 'sensor',
+    DIMMER = 'dimmer',
+    RGB = 'rgb',
 }
 
 @Entity('devices')
@@ -32,6 +40,16 @@ export class Device extends BaseEntity implements IBaseEntity {
         comment: 'Loại thiết bị',
     })
     type: DeviceTypeEnum;
+
+    @Column({
+        type: 'text',
+        default: DeviceFunctionEnum.RELAY,
+        comment: 'Chức năng thiết bị',
+    })
+    function: DeviceFunctionEnum;
+
+    @Column({ type: 'text', nullable: true })
+    controlPin?: string;
 
     @Column({ default: false })
     status: boolean;
@@ -75,6 +93,9 @@ export class Device extends BaseEntity implements IBaseEntity {
     @Column({ type: 'float', nullable: true })
     humidity?: number;
 
+    @Column({ type: 'float', nullable: true })
+    speed?: number;
+
     @Column({ default: false })
     isConnected: boolean;
 
@@ -83,6 +104,9 @@ export class Device extends BaseEntity implements IBaseEntity {
 
     @Column({ type: 'datetime', nullable: true })
     lastSeenAt?: Date;
+
+    @Column({ type: 'datetime', nullable: true })
+    lastErrorAt?: Date;
 
     @Column({ type: 'text', nullable: true })
     manufacturer?: string;
@@ -93,8 +117,21 @@ export class Device extends BaseEntity implements IBaseEntity {
     @Column({ type: 'text', nullable: true })
     serialNumber?: string;
 
-    @Column()
-    userId: string;
+    @Column({ type: 'json', nullable: true })
+    config?: {
+        updateInterval?: number;
+        threshold?: number;
+        [key: string]: any;
+    };
+
+    @ManyToOne(() => Room, (room) => room.devices)
+    room: Room;
+
+    @ManyToOne(() => Controller, (controller) => controller.devices)
+    controller: Controller;
+
+    @ManyToOne(() => User, (user) => user.devices)
+    user: User;
 
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
@@ -104,10 +141,4 @@ export class Device extends BaseEntity implements IBaseEntity {
 
     @DeleteDateColumn({ name: 'deleted_at' })
     deletedAt?: Date;
-
-    @ManyToOne(() => User, (user) => user.devices)
-    user: User;
-
-    @ManyToOne(() => Room, (room) => room.devices)
-    room: Room;
 }

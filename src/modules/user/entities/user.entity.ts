@@ -15,6 +15,7 @@ import {
 
 import { Device } from '@app/modules/device/entities/device.entity';
 import { Room } from '@app/modules/room/entities/room.entity';
+import { Controller } from '@app/modules/controller/entities/controller.entity';
 import { IBaseEntity } from '@interfaces/crud.interface';
 
 @Entity('users')
@@ -58,6 +59,9 @@ export class User implements IBaseEntity {
 
     @OneToMany(() => Device, (device) => device.user)
     devices: Device[];
+
+    @OneToMany(() => Controller, (controller) => controller.user)
+    controllers: Controller[];
 
     @OneToMany(() => Room, (room) => room.user)
     rooms: Room[];
