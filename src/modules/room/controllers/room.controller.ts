@@ -25,9 +25,8 @@ import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator
 import { User } from '@app/modules/user/entities/user.entity';
 import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 
-@Controller('rooms')
 @ApiTags('Rooms')
-// @UseGuards(JwtAuthGuard)
+@Controller('rooms')
 export class RoomController {
     constructor(private readonly roomService: RoomService) {}
 
@@ -49,7 +48,17 @@ export class RoomController {
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
     async createForUser(@Body() createRoomDto: CreateRoomUserDto, @CurrentUser() user: User): Promise<Room> {
+        
         return this.roomService.createForUser(createRoomDto, user);
+    }
+    @Get('user')
+    @ApiOperation({ summary: 'Get all rooms by user' })
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiResponse({ status: HttpStatus.OK, description: 'Rooms retrieved successfully', type: [Room] })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
+    async findAllByUser(@CurrentUser() user: User): Promise<Room[]> {
+        return this.roomService.findByUserId(user.id);
     }
 
     @Get()
@@ -63,6 +72,8 @@ export class RoomController {
     async findAll(@Query() query: PaginationDto): Promise<IPaginatedResponse<Room>> {
         return this.roomService.findWithPagination(query);
     }
+
+ 
 
     @Get(':id')
     @ApiOperation({ summary: 'Get room by ID' })
@@ -83,6 +94,18 @@ export class RoomController {
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
     async update(@Param('id', ParseUUIDPipe) id: string, @Body() updateRoomDto: Partial<CreateRoomDto>): Promise<Room> {
         return this.roomService.update(id, updateRoomDto);
+    }
+
+    @Delete('user/:id')
+    @ApiOperation({ summary: 'Soft delete room by ID' })
+    @ApiParam({ name: 'id', description: 'Room ID', type: String, format: 'uuid' })
+    @ApiResponse({ status: HttpStatus.OK, description: 'Room deleted successfully' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Room not found' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    async softDeleteByUserId(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User): Promise<void> {
+        await this.roomService.softDeleteByUserId(id, user);
     }
 
     @Delete(':id')

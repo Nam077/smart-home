@@ -90,6 +90,7 @@ class CreateUserResponseDto extends BaseResponseDto {
 }
 
 @ApiTags('Users')
+@ApiTags('Admin')
 @Controller('users')
 export class UserController {
     constructor(private readonly userService: UserService) {}

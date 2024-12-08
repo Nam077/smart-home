@@ -25,8 +25,10 @@ import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
 import { User } from '@app/modules/user/entities/user.entity';
 
-@Controller('devices')
 @ApiTags('Devices')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('devices')
 
 export class DeviceController {
     constructor(private readonly deviceService: DeviceService) {}
@@ -41,8 +43,6 @@ export class DeviceController {
     }
 
     @Post('user')
-    @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
     @ApiOperation({ summary: 'Create a new device' })
     @ApiResponse({ status: HttpStatus.CREATED, description: 'Device created successfully', type: Device })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
@@ -80,9 +80,11 @@ export class DeviceController {
     }
 
     @Get('controller/:controllerId')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get devices by controller id' })
-    findByControllerId(@Param('controllerId', ParseUUIDPipe) controllerId: string) {
-        return this.deviceService.findByControllerId(controllerId);
+    findByControllerId(@Param('controllerId', ParseUUIDPipe) controllerId: string, @CurrentUser() user: User) {
+        return this.deviceService.findByControllerId(controllerId, user);
     }
 
     @Patch(':id')
