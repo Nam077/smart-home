@@ -105,9 +105,6 @@ export class MqttHandlerService {
 
             // Update device status
             device.status = Boolean(message.status) || device.status;
-            if (message.brightness !== undefined) device.brightness = message.brightness;
-            if (message.speed !== undefined) device.speed = message.speed;
-            if (message.temperature !== undefined) device.temperature = message.temperature;
             if (message.value !== undefined) device.value = message.value;
 
             if (message.error) {
@@ -157,72 +154,7 @@ export class MqttHandlerService {
 
                     break;
 
-                case CommandTypeEnum.SET_BRIGHTNESS: {
-                    const brightness = Math.max(0, Math.min(100, Number(message.value)));
-
-                    for (const device of devices) {
-                        if (device.brightness !== undefined) {
-                            device.brightness = brightness;
-                            device.lastSeenAt = now;
-                            await device.save();
-
-                            await this.mqttPublisher.publishToDevice(
-                                roomId,
-                                device.id,
-                                CommandTypeEnum.SET_BRIGHTNESS,
-                                {
-                                    value: brightness,
-                                    timestamp: now.toISOString(),
-                                },
-                            );
-                        }
-                    }
-
-                    break;
-                }
-
-                case CommandTypeEnum.SET_SPEED: {
-                    const speed = Math.max(0, Math.min(100, Number(message.value)));
-
-                    for (const device of devices) {
-                        if (device.speed !== undefined) {
-                            device.speed = speed;
-                            device.lastSeenAt = now;
-                            await device.save();
-
-                            await this.mqttPublisher.publishToDevice(roomId, device.id, CommandTypeEnum.SET_SPEED, {
-                                value: speed,
-                                timestamp: now.toISOString(),
-                            });
-                        }
-                    }
-
-                    break;
-                }
-
-                case CommandTypeEnum.SET_TEMPERATURE: {
-                    const temperature = Number(message.value);
-
-                    for (const device of devices) {
-                        if (device.temperature !== undefined) {
-                            device.temperature = temperature;
-                            device.lastSeenAt = now;
-                            await device.save();
-
-                            await this.mqttPublisher.publishToDevice(
-                                roomId,
-                                device.id,
-                                CommandTypeEnum.SET_TEMPERATURE,
-                                {
-                                    value: temperature,
-                                    timestamp: now.toISOString(),
-                                },
-                            );
-                        }
-                    }
-
-                    break;
-                }
+                
 
                 case CommandTypeEnum.SET_VALUE: {
                     const value = Number(message.value);
@@ -416,38 +348,7 @@ export class MqttHandlerService {
                     device.lastSeenAt = now;
                     break;
 
-                case CommandTypeEnum.SET_BRIGHTNESS:
-                    dto = plainToClass(DeviceBrightnessControlDto, {
-                        ...payload,
-                        deviceId,
-                        roomId: device.room.id,
-                        value: Number(payload.value),
-                    });
-                    device.brightness = Math.max(0, Math.min(100, Number(dto.value)));
-                    device.lastSeenAt = now;
-                    break;
-
-                case CommandTypeEnum.SET_TEMPERATURE:
-                    dto = plainToClass(DeviceTemperatureControlDto, {
-                        ...payload,
-                        deviceId,
-                        roomId: device.room.id,
-                        value: Number(payload.value),
-                    });
-                    device.temperature = Number(dto.value);
-                    device.lastSeenAt = now;
-                    break;
-
-                case CommandTypeEnum.SET_SPEED:
-                    dto = plainToClass(DeviceSpeedControlDto, {
-                        ...payload,
-                        deviceId,
-                        roomId: device.room.id,
-                        value: Number(payload.value),
-                    });
-                    device.speed = Math.max(0, Math.min(100, Number(dto.value)));
-                    device.lastSeenAt = now;
-                    break;
+                
 
                 case CommandTypeEnum.UPDATE_CONFIG:
                     dto = plainToClass(DeviceConfigControlDto, payload);
@@ -475,8 +376,6 @@ export class MqttHandlerService {
                         roomId: device.room.id,
                         status: device.status,
                         value: device.value,
-                        brightness: device.brightness,
-                        temperature: device.temperature,
                         isOnline: device.isOnline,
                         lastSeenAt: device.lastSeenAt,
                         timestamp: now.toISOString(),
@@ -544,10 +443,6 @@ export class MqttHandlerService {
             const response = plainToClass(DeviceStatusResponseDto, {
                 status: device.status,
                 value: device.value,
-                brightness: device.brightness,
-                temperature: device.temperature,
-                humidity: device.humidity,
-                speed: device.speed,
                 isOnline: device.isOnline,
                 isConnected: device.isConnected,
                 config: device.config,
@@ -555,7 +450,6 @@ export class MqttHandlerService {
                 lastSeenAt: device.lastSeenAt,
                 updatedAt: device.updatedAt,
                 unit: device.unit,
-                location: device.location,
                 manufacturer: device.manufacturer,
                 model: device.model,
                 serialNumber: device.serialNumber,

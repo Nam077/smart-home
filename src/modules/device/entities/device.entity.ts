@@ -20,10 +20,63 @@ export enum DeviceTypeEnum {
 }
 
 export enum DeviceFunctionEnum {
-    RELAY = 'relay',
-    SENSOR = 'sensor',
-    DIMMER = 'dimmer',
-    RGB = 'rgb',
+    // Relay (Công tắc)
+    RELAY_SIMPLE = 'relaySimple',          // Công tắc bật/tắt cơ bản
+    RELAY_ADVANCED = 'relayAdvanced',      // Công tắc nâng cao: hẹn giờ, nhiều trạng thái
+
+    // Environment Sensors (Cảm biến môi trường)
+    SENSOR_TEMPERATURE = 'sensorTemperature',    // Cảm biến nhiệt độ
+    SENSOR_HUMIDITY = 'sensorHumidity',         // Cảm biến độ ẩm
+    SENSOR_AIR_QUALITY = 'sensorAirQuality',    // Cảm biến chất lượng không khí (CO2, PM2.5)
+    
+    // Safety Sensors (Cảm biến an toàn)
+    SENSOR_SMOKE = 'sensorSmoke',          // Cảm biến khói
+    SENSOR_GAS = 'sensorGas',             // Cảm biến khí gas
+    SENSOR_WATER_LEAK = 'sensorWaterLeak', // Cảm biến rò rỉ nước
+    SENSOR_CO = 'sensorCO',               // Cảm biến khí CO
+    
+    // Security Sensors (Cảm biến an ninh)
+    SENSOR_MOTION = 'sensorMotion',       // Cảm biến chuyển động
+    SENSOR_DOOR = 'sensorDoor',           // Cảm biến cửa
+    SENSOR_GLASS = 'sensorGlass',         // Cảm biến vỡ kính
+    SENSOR_VIBRATION = 'sensorVibration', // Cảm biến rung
+    
+    // Light Sensors (Cảm biến ánh sáng)
+    SENSOR_LIGHT = 'sensorLight',         // Cảm biến ánh sáng
+    SENSOR_UV = 'sensorUV',               // Cảm biến tia UV
+
+    // Dimmer (Điều chỉnh)
+    DIMMER_BASIC = 'dimmerBasic',         // Điều chỉnh cơ bản: đèn, quạt
+    DIMMER_ADVANCED = 'dimmerAdvanced',    // Điều chỉnh nâng cao: âm lượng, thiết bị sưởi
+
+    // Climate Control (Điều khiển môi trường)
+    CLIMATE_TEMPERATURE = 'climateTemperature',   // Điều chỉnh nhiệt độ: điều hòa, máy sưởi
+    CLIMATE_HUMIDITY = 'climateHumidity',        // Điều chỉnh độ ẩm: máy hút ẩm, máy tạo độ ẩm
+
+    // Curtain & Blinds (Rèm và cửa cuốn)
+    CURTAIN_CONTROL = 'curtainControl',    // Điều khiển rèm cơ bản: mở/đóng, điều chỉnh vị trí
+
+    // Security (An ninh)
+    SECURITY_MONITORING = 'securityMonitoring',   // Giám sát: camera, cảm biến an ninh
+    SECURITY_ACCESS = 'securityAccess',          // Kiểm soát truy cập: khóa cửa, còi báo động
+
+    // Appliances (Thiết bị gia dụng)
+    APPLIANCE_KITCHEN = 'applianceKitchen',     // Thiết bị nhà bếp: lò nướng, máy pha cà phê
+    APPLIANCE_CLEANING = 'applianceCleaning',   // Thiết bị dọn dẹp: máy giặt, máy sấy
+    APPLIANCE_COOLING = 'applianceCooling',     // Thiết bị làm mát: tủ lạnh, quạt
+
+    // Entertainment (Giải trí)
+    ENTERTAINMENT_CONTROL = 'entertainmentControl', // Điều khiển thiết bị giải trí: TV, loa
+
+    // Energy Management (Quản lý năng lượng)
+    ENERGY_MANAGEMENT = 'energyManagement',     // Quản lý năng lượng: đo lường tiêu thụ
+
+    // Water Management (Quản lý nước)
+    WATER_CONTROL = 'waterControl',         // Quản lý nước: tưới cây, bơm, van nước
+
+    // Miscellaneous (Khác)
+    DEVICE_MAINTENANCE = 'deviceMaintenance',    // Bảo trì: cập nhật firmware
+    DEVICE_AUTOMATION = 'deviceAutomation',     // Tự động hóa: lên lịch, chế độ tự động
 }
 
 @Entity('devices')
@@ -43,7 +96,7 @@ export class Device extends BaseEntity implements IBaseEntity {
 
     @Column({
         type: 'text',
-        default: DeviceFunctionEnum.RELAY,
+        default: DeviceFunctionEnum.RELAY_SIMPLE,
         comment: 'Chức năng thiết bị',
     })
     function: DeviceFunctionEnum;
@@ -80,21 +133,6 @@ export class Device extends BaseEntity implements IBaseEntity {
 
     @Column({ default: false })
     isOnline: boolean;
-
-    @Column({ type: 'text', nullable: true })
-    location?: string;
-
-    @Column({ default: 0 })
-    brightness: number;
-
-    @Column({ type: 'float', nullable: true })
-    temperature?: number;
-
-    @Column({ type: 'float', nullable: true })
-    humidity?: number;
-
-    @Column({ type: 'float', nullable: true })
-    speed?: number;
 
     @Column({ default: false })
     isConnected: boolean;

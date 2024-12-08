@@ -14,9 +14,6 @@ import {
     DeviceControlBaseDto,
     DeviceStatusControlDto,
     DeviceValueControlDto,
-    DeviceBrightnessControlDto,
-    DeviceTemperatureControlDto,
-    DeviceSpeedControlDto,
     DeviceConfigControlDto,
 } from './dto/device-control.dto';
 import { IMqttPublisher } from './interfaces/mqtt-publisher.interface';
@@ -192,15 +189,6 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
                 break;
             case CommandTypeEnum.SET_VALUE:
                 payload = command as DeviceValueControlDto;
-                break;
-            case CommandTypeEnum.SET_BRIGHTNESS:
-                payload = command as DeviceBrightnessControlDto;
-                break;
-            case CommandTypeEnum.SET_TEMPERATURE:
-                payload = command as DeviceTemperatureControlDto;
-                break;
-            case CommandTypeEnum.SET_SPEED:
-                payload = command as DeviceSpeedControlDto;
                 break;
             case CommandTypeEnum.UPDATE_CONFIG:
                 payload = command as DeviceConfigControlDto;

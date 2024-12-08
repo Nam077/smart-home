@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, OmitType } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsIP, IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 import { DeviceFunctionEnum, DeviceTypeEnum } from '../entities/device.entity';
@@ -23,8 +23,8 @@ export class CreateDeviceDto {
     @ApiProperty({
         description: 'Device function',
         enum: DeviceFunctionEnum,
-        example: DeviceFunctionEnum.RELAY,
-        default: DeviceFunctionEnum.RELAY,
+        example: DeviceFunctionEnum.RELAY_SIMPLE,
+        default: DeviceFunctionEnum.RELAY_SIMPLE,
     })
     @IsEnum(DeviceFunctionEnum)
     function: DeviceFunctionEnum;
@@ -75,23 +75,6 @@ export class CreateDeviceDto {
     @IsOptional()
     description?: string;
 
-    @ApiProperty({
-        description: 'Device location',
-        example: 'Living Room Corner',
-        required: false,
-    })
-    @IsString()
-    @IsOptional()
-    location?: string;
-
-    @ApiProperty({
-        description: 'Device brightness (0-100)',
-        example: 50,
-        required: false,
-    })
-    @IsNumber()
-    @IsOptional()
-    brightness?: number;
 
     @ApiProperty({
         description: 'Device manufacturer',
@@ -198,3 +181,9 @@ export class CreateDeviceDto {
     @IsOptional()
     isOnline?: boolean;
 }
+
+/**
+ * DTO for creating a device by a user
+ * Omits userId as it will be automatically set from the authenticated user
+ */
+export class CreateDeviceUserDto extends OmitType(CreateDeviceDto, ['userId']) {}

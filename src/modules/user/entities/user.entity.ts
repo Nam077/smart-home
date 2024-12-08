@@ -33,7 +33,9 @@ export class User implements IBaseEntity {
     @MinLength(3)
     username: string;
 
-    @Column()
+    @Column({
+        select: false,
+    })
     @IsNotEmpty()
     @MinLength(8)
     @Exclude()

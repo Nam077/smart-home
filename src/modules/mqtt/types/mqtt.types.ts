@@ -9,9 +9,6 @@ export enum CommandTypeEnum {
 
     // Unicast Commands
     SET_STATUS = 'set_status',
-    SET_BRIGHTNESS = 'set_brightness',
-    SET_SPEED = 'set_speed',
-    SET_TEMPERATURE = 'set_temperature',
     SET_VALUE = 'set_value',
     SET_COLOR = 'set_color',
     GET_STATUS = 'get_status',

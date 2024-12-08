@@ -10,16 +10,20 @@ import {
     Post,
     Put,
     Query,
+    UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { PaginatedResponseDto } from '@app/common/dto/paginated-response.dto';
 import { PaginationDto } from '@app/common/dto/pagination.dto';
 import { IPaginatedResponse } from '@app/common/interfaces/crud.interface';
 
-import { CreateRoomDto } from '../dto/create-room.dto';
+import { CreateRoomDto, CreateRoomUserDto } from '../dto/create-room.dto';
 import { Room } from '../entities/room.entity';
 import { RoomService } from '../services/room.service';
+import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
+import { User } from '@app/modules/user/entities/user.entity';
+import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 
 @Controller('rooms')
 @ApiTags('Rooms')
@@ -34,6 +38,18 @@ export class RoomController {
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
     async create(@Body() createRoomDto: CreateRoomDto): Promise<Room> {
         return this.roomService.create(createRoomDto);
+    }
+
+
+    @Post('user')
+    @ApiOperation({ summary: 'Create a new room for user' })
+    @ApiResponse({ status: HttpStatus.CREATED, description: 'Room created successfully', type: Room })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
+    async createForUser(@Body() createRoomDto: CreateRoomUserDto, @CurrentUser() user: User): Promise<Room> {
+        return this.roomService.createForUser(createRoomDto, user);
     }
 
     @Get()

@@ -10,19 +10,24 @@ import {
     Post,
     Put,
     Query,
+    UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { PaginationDto } from '@app/common/dto/pagination.dto';
 import { IPaginatedResponse } from '@app/common/interfaces/crud.interface';
 
-import { CreateDeviceDto } from '../dto/create-device.dto';
+import { CreateDeviceDto, CreateDeviceUserDto } from '../dto/create-device.dto';
 import { Device } from '../entities/device.entity';
 import { DeviceService } from '../services/device.service';
+import { UpdateDeviceDto } from '@app/modules/device/dto/update-device.dto';
+import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
+import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
+import { User } from '@app/modules/user/entities/user.entity';
 
 @Controller('devices')
 @ApiTags('Devices')
-// @UseGuards(JwtAuthGuard)
+
 export class DeviceController {
     constructor(private readonly deviceService: DeviceService) {}
 
@@ -33,6 +38,17 @@ export class DeviceController {
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
     async create(@Body() createDeviceDto: CreateDeviceDto): Promise<Device> {
         return this.deviceService.create(createDeviceDto);
+    }
+
+    @Post('user')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create a new device' })
+    @ApiResponse({ status: HttpStatus.CREATED, description: 'Device created successfully', type: Device })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
+    @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
+    async createForUser(@Body() createDeviceDto: CreateDeviceUserDto, @CurrentUser() user: User): Promise<Device> {
+        return this.deviceService.createForUser(createDeviceDto, user);
     }
 
     @Get()
@@ -78,7 +94,7 @@ export class DeviceController {
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
     async update(
         @Param('id', ParseUUIDPipe) id: string,
-        @Body() updateDeviceDto: Partial<CreateDeviceDto>,
+        @Body() updateDeviceDto: UpdateDeviceDto,
     ): Promise<Device> {
         return this.deviceService.update(id, updateDeviceDto);
     }

@@ -1,11 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { IBaseOptions } from '@app/common/interfaces/crud.interface';
 
-import { CreateControllerDto } from '../dto/create-controller.dto';
+import { CreateControllerDto, CreateControllerForUserDto } from '../dto/create-controller.dto';
 import { UpdateControllerDto } from '../dto/update-controller.dto';
 import { ControllerService } from '../services/controller.service';
+import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
+import { User } from '@app/modules/user/entities/user.entity';
+import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 
 @ApiTags('controllers')
 // @UseGuards(JwtAuthGuard)
@@ -17,6 +20,13 @@ export class ControllerController {
     @ApiOperation({ summary: 'Create a new controller' })
     create(@Body() createControllerDto: CreateControllerDto) {
         return this.controllerService.create(createControllerDto);
+    }
+    @Post('user')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({ summary: 'Create a new controller' })
+    createForUser(@Body() createControllerDto: CreateControllerForUserDto, @CurrentUser() user: User) {
+        return this.controllerService.createForUser(createControllerDto, user);
     }
 
     @Get()

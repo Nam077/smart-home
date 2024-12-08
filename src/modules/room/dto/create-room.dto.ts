@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, OmitType } from '@nestjs/swagger';
 import { IsNumber, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreateRoomDto {
@@ -52,3 +52,7 @@ export class CreateRoomDto {
     @IsUUID()
     userId: string;
 }
+
+
+export class CreateRoomUserDto extends OmitType (CreateRoomDto, ['userId']) {}
+  
