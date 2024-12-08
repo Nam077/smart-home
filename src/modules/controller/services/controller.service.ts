@@ -6,8 +6,9 @@ import { IBaseOptions, ICsalContext } from '@app/common/interfaces/crud.interfac
 import { BaseCrudService } from '@app/common/services/base-crud.service';
 import { UserService } from '@app/modules/user/services/user.service';
 
-import { CreateControllerDto } from '../dto/create-controller.dto';
+import { CreateControllerDto, CreateControllerForUserDto } from '../dto/create-controller.dto';
 import { Controller } from '../entities/controller.entity';
+import { User } from '@app/modules/user/entities/user.entity';
 
 @Injectable()
 export class ControllerService extends BaseCrudService<Controller> {
@@ -51,6 +52,10 @@ export class ControllerService extends BaseCrudService<Controller> {
         });
 
         return await this.controllerRepository.save(controller);
+    }
+
+    async createForUser(createControllerDto: CreateControllerForUserDto, user: User): Promise<Controller> {
+        return this.create({ ...createControllerDto, userId: user.id });
     }
 
     async updateOnlineStatus(id: string, isOnline: boolean): Promise<Controller> {

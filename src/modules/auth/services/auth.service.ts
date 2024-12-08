@@ -8,14 +8,30 @@ import { LoginDto } from '../dto/login.dto';
 
 @Injectable()
 export class AuthService {
+
     constructor(
         private readonly userService: UserService,
         private readonly jwtService: JwtService,
-    ) {}
+    ) { }
 
+    async me(user: User): Promise<User> {
+        console.log(user);
+        
+        if (!user) {
+            throw new UnauthorizedException();
+        }
+        return this.userService.findById(user.id);
+    }
     async validateUser(email: string, password: string): Promise<any> {
         const user = await this.userService.findOne({
             where: { email },
+            select: {
+                id: true,
+                email: true,
+                password: true,
+                firstName: true,
+                lastName: true
+            }
         });
 
         console.log(user);

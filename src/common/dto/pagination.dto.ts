@@ -94,11 +94,11 @@ export class PaginationDto {
     }
 
     getSelect(): string[] | undefined {
-        return split(this.select, ',');
+        return split(this.select, ',').map((field) => field.trim());
     }
 
     getRelations(): string[] | undefined {
-        return split(this.relations, ',');
+        return split(this.relations, ',').map((relation) => relation.trim());
     }
 
     getFilter(): Record<string, any> | undefined {
