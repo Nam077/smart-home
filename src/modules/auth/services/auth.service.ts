@@ -71,6 +71,14 @@ export class AuthService {
     }
 
     private async getTokens(userId: string, email: string) {
+        const accessTokenExpiresIn = this.configService.get<string>('jwt.expiresIn');
+        const refreshTokenExpiresIn = this.configService.get<string>('jwt.refreshExpiresIn');
+
+        // Calculate expiration dates
+        const now = new Date();
+        const accessTokenExpiration = new Date(now.getTime() + this.parseExpirationTime(accessTokenExpiresIn));
+        const refreshTokenExpiration = new Date(now.getTime() + this.parseExpirationTime(refreshTokenExpiresIn));
+
         const [accessToken, refreshToken] = await Promise.all([
             this.jwtService.signAsync(
                 {
@@ -79,7 +87,7 @@ export class AuthService {
                 },
                 {
                     secret: this.configService.get<string>('jwt.secret'),
-                    expiresIn: this.configService.get<string>('jwt.expiresIn'),
+                    expiresIn: accessTokenExpiresIn,
                 },
             ),
             this.jwtService.signAsync(
@@ -89,15 +97,35 @@ export class AuthService {
                 },
                 {
                     secret: this.configService.get<string>('jwt.refreshSecret'),
-                    expiresIn: this.configService.get<string>('jwt.refreshExpiresIn'),
+                    expiresIn: refreshTokenExpiresIn,
                 },
             ),
         ]);
 
         return {
             accessToken,
+            accessTokenExpires: accessTokenExpiration,
             refreshToken,
+            refreshTokenExpires: refreshTokenExpiration,
         };
+    }
+
+    private parseExpirationTime(duration: string): number {
+        const unit = duration.slice(-1);
+        const value = parseInt(duration.slice(0, -1));
+
+        switch (unit) {
+            case 's':
+                return value * 1000; // seconds to milliseconds
+            case 'm':
+                return value * 60 * 1000; // minutes to milliseconds
+            case 'h':
+                return value * 60 * 60 * 1000; // hours to milliseconds
+            case 'd':
+                return value * 24 * 60 * 60 * 1000; // days to milliseconds
+            default:
+                return 0;
+        }
     }
 
     async verifyToken(token: string): Promise<User> {

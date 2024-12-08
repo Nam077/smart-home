@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -20,8 +20,12 @@ export class ControllerService extends BaseCrudService<Controller> {
         super(controllerRepository);
     }
 
-    async findByUserId(userId: string): Promise<Controller[]> {
-        return await this.findAll({ where: { user: { id: userId } }, relations: ['user', 'devices'] });
+    async findByUserId(userId: string, withRelations = false) {
+        if (withRelations) {
+            return await this.findAll({ where: { user: { id: userId } }, relations: ['user', 'devices'] });
+        }
+
+        return await this.findAll({ where: { user: { id: userId } } });
     }
 
     async findByDeviceId(deviceId: string): Promise<Controller | null> {
@@ -99,5 +103,26 @@ export class ControllerService extends BaseCrudService<Controller> {
         controller.lastErrorAt = new Date();
 
         return await this.controllerRepository.save(controller);
+    }
+
+    async getCountDeviceByIdController(id: string): Promise<number> {
+       const controller = await this.findOne({ where: { id }, relations: ['devices'] });
+       return controller.devices.length;
+    }
+
+    async softDeleteByUserId(id: string, user: User): Promise<Controller> {
+        const controller = await this.findOne({ where: { id, user: { id: user.id } } });
+        if (!controller) {
+            throw new NotFoundException(`Controller not found: ${id}`);
+        }
+
+        if (await this.getCountDeviceByIdController(id) > 0) {
+            throw new BadRequestException('Cannot delete controller with devices');
+        }
+
+        await this.controllerRepository.softDelete({ id });
+
+        return controller;
+
     }
 }

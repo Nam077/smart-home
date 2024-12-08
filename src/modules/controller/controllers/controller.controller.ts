@@ -10,17 +10,17 @@ import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator
 import { User } from '@app/modules/user/entities/user.entity';
 import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 
-@ApiTags('controllers')
-// @UseGuards(JwtAuthGuard)
+@ApiTags('Controllers')
 @Controller('controllers')
 export class ControllerController {
-    constructor(private readonly controllerService: ControllerService) {}
+    constructor(private readonly controllerService: ControllerService) { }
 
     @Post()
     @ApiOperation({ summary: 'Create a new controller' })
     create(@Body() createControllerDto: CreateControllerDto) {
         return this.controllerService.create(createControllerDto);
     }
+
     @Post('user')
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
@@ -33,6 +33,14 @@ export class ControllerController {
     @ApiOperation({ summary: 'Get all controllers' })
     findAll(@Query() options?: IBaseOptions) {
         return this.controllerService.findAll(options);
+    }
+
+    @Get('by-user')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get all controllers' })
+    findAllByUserId(@CurrentUser() user: User) {
+        return this.controllerService.findByUserId(user.id);
     }
 
     @Get(':id')
@@ -59,9 +67,18 @@ export class ControllerController {
         return this.controllerService.update(id, updateControllerDto);
     }
 
+    @Delete('user/:id')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Delete controller by id' })
+    hardRemove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+        return this.controllerService.softDeleteByUserId(id, user);
+    }
     @Delete(':id')
     @ApiOperation({ summary: 'Delete controller by id' })
     remove(@Param('id', ParseUUIDPipe) id: string) {
         return this.controllerService.softDelete(id);
     }
+
+
 }

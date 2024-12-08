@@ -8,7 +8,7 @@ import { User } from '@app/modules/user/entities/user.entity';
 import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 import { RefreshTokenGuard } from '@app/modules/auth/guards/refresh-token.guard';
 
-@ApiTags('auth')
+@ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
     constructor(private readonly authService: AuthService) {}

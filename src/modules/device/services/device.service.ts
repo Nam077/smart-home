@@ -37,10 +37,19 @@ export class DeviceService extends BaseCrudService<Device> {
         return device?.room?.id || null;
     }
 
-    async findByControllerId(controllerId: string): Promise<Device[]> {
+    async findByControllerId(controllerId: string, user: User): Promise<Device[]> {
+        const controller = await this.controllerService.findOne({ where: { id: controllerId , user: { id: user.id } } });
+        
+        if (!controller) {
+            throw new NotFoundException(`Controller not found: ${controllerId}`);
+        }
+
         return await this.findAll({
             where: { controller: { id: controllerId } },
-            relations: ['controller', 'room'],
+            relations: {
+                room: true,
+                controller: true
+            }
         });
     }
 
