@@ -106,34 +106,138 @@ The user module handles user account management and permissions.
 
 ### 🔄 MQTT Module
 
-The MQTT module handles real-time communication with IoT devices.
+A NestJS module that implements an MQTT broker and client functionality for IoT device communication in a smart home system.
+
+**Core Features:**
+- Built-in MQTT broker using Aedes
+- Support for both TCP and WebSocket connections 
+- Device authentication and authorization
+- Automatic device connection tracking
+- Heartbeat monitoring
+- Broadcast and unicast messaging
+- Room-based device grouping
+- Configurable settings via environment variables
+
+**Architecture:**
+- **MqttService**: Main service that initializes and manages the MQTT broker
+- **MqttHandlerService**: Handles incoming MQTT messages and device control logic
+- **MqttPublisherService**: Manages message publishing and topic subscriptions
+- **MqttHeartbeatService**: Monitors device connectivity through heartbeat checks
 
 **Topic Structure:**
-- Format: `home/{roomId}/{deviceId}/{type}`
-- Types: `status`, `control`, `config`, `error`
+```
+home/{roomId}/{deviceId}/{type}
+```
+Where:
+- `roomId`: ID of the room where device is located
+- `deviceId`: Unique identifier of the device
+- `type`: Message type (status/control/data/error)
 
 **Message Types:**
-- Device Connection
-- Status Updates
-- Control Commands
-- Configuration Changes
-- Error Reports
+```typescript
+enum CommandTypeEnum {
+  // Broadcast Commands
+  TURN_OFF_ALL = 'turn_off_all',
+  TURN_ON_ALL = 'turn_on_all',
 
-**Security Features:**
-- Topic-based access control
-- Message validation
-- Connection monitoring
-- Error logging
-- Secure device authentication
+  // Connection Commands  
+  DEVICE_CONNECT = 'device_connect',
+  DEVICE_DISCONNECT = 'device_disconnect',
 
-**Environment Configuration:**
+  // Unicast Commands
+  SET_STATUS = 'set_status',
+  SET_VALUE = 'set_value', 
+  SET_COLOR = 'set_color',
+  GET_STATUS = 'get_status',
+  GET_INFO = 'get_info',
+
+  // Config Commands
+  UPDATE_CONFIG = 'update_config',
+  SYNC_TIME = 'sync_time'
+}
+```
+
+**DTOs:**
+- DeviceControlBaseDto: Base DTO for device control commands
+- DeviceStatusControlDto: For status control (on/off)
+- DeviceValueControlDto: For numeric value control
+- DeviceColorControlDto: For RGB color control
+- DeviceConfigControlDto: For device configuration
+- DeviceStatusResponseDto: For device status responses
+
+**Example Messages:**
+
+1. Device Connection:
+```json
+{
+  "command": "device_connect",
+  "deviceInfo": {
+    "ipAddress": "192.168.1.100",
+    "macAddress": "AA:BB:CC:DD:EE:FF",
+    "firmwareVersion": "1.0.0"
+  },
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+2. Control Command:
+```json
+{
+  "command": "set_status",
+  "value": true,
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+3. Status Update:
+```json
+{
+  "status": true,
+  "value": 75,
+  "brightness": 80,
+  "isOnline": true,
+  "isConnected": true,
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+**Configuration:**
 ```env
+# MQTT Settings
 MQTT_HOST=localhost
 MQTT_PORT=1883
 MQTT_WS_PORT=8883
 MQTT_USERNAME=mqtt_user
 MQTT_PASSWORD=mqtt_password
-API_URL=http://localhost:3000
+```
+
+**Security Features:**
+- Username/password authentication
+- Topic-based access control
+- Message validation
+- Connection monitoring
+- Error logging
+- Device heartbeat checks
+
+**Usage Example:**
+```typescript
+// Publishing a control command
+await mqttService.publishControl(deviceId, {
+  command: CommandTypeEnum.SET_STATUS,
+  value: true
+});
+
+// Broadcasting to a room
+await mqttPublisher.broadcastToRoom(roomId, CommandTypeEnum.TURN_OFF_ALL);
+
+// Updating device config
+await mqttService.publishControl(deviceId, {
+  command: CommandTypeEnum.UPDATE_CONFIG,
+  value: {
+    updateInterval: 5000,
+    threshold: 0.5
+  }
+});
 ```
 
 ## Quick Start

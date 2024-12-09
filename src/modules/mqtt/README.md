@@ -1,197 +1,343 @@
-# MQTT Module Documentation
+# Module MQTT
 
-## Overview
-The MQTT module provides MQTT broker functionality for IoT device communication in the smart home system. It handles device connections, message routing, and device control commands.
+Module NestJS triển khai chức năng MQTT broker và client để giao tiếp với các thiết bị IoT trong hệ thống nhà thông minh.
 
-## Module Structure
+## Tổng Quan
+
+Module này cung cấp giải pháp MQTT hoàn chỉnh với broker tích hợp sẵn, quản lý thiết bị và khả năng giao tiếp thời gian thực.
+
+## Tính Năng
+
+- MQTT broker tích hợp sử dụng Aedes
+- Hỗ trợ kết nối TCP và WebSocket
+- Xác thực và phân quyền thiết bị
+- Theo dõi kết nối thiết bị tự động
+- Giám sát heartbeat
+- Nhắn tin broadcast và unicast
+- Nhóm thiết bị theo phòng
+
+## Cài Đặt
+
+```bash
+npm install aedes aedes-server-factory
+```
+
+## Cấu Hình
+
+Tạo file `.env` với các cài đặt MQTT sau:
+
+```env
+MQTT_HOST=localhost
+MQTT_PORT=1883
+MQTT_WS_PORT=8883
+MQTT_USERNAME=mqtt_user
+MQTT_PASSWORD=mqtt_password
+```
+
+## Cấu Trúc Module
 
 ```
 mqtt/
-├── dto/                    # Data Transfer Objects
+├── dto/                    # Các đối tượng truyền dữ liệu
 │   └── device-control.dto.ts
-├── interfaces/            # MQTT interfaces
+├── interfaces/            # Các interface
 │   └── mqtt-publisher.interface.ts
-├── services/             # MQTT services
+├── services/             # Các service
 │   ├── mqtt-handler.service.ts
 │   ├── mqtt-heartbeat.service.ts
-│   └── mqtt-publisher.service.ts
-├── types/                # MQTT types and enums
+│   ├── mqtt-publisher.service.ts
+│   └── mqtt-queue.service.ts
+├── types/                # Kiểu dữ liệu và enum
 │   └── mqtt.types.ts
-├── mqtt.config.ts        # MQTT configuration
-├── mqtt.controller.ts    # MQTT controller
-├── mqtt.module.ts        # Module definition
-└── mqtt.service.ts       # Main MQTT service
+├── mqtt.config.ts        # Cấu hình module
+├── mqtt.controller.ts    # Các endpoint REST
+├── mqtt.module.ts        # Định nghĩa module
+└── mqtt.service.ts       # Service MQTT chính
 ```
 
-## Core Components
+## Cấu Trúc Topic
 
-### 1. MqttService
-- Main service that manages the MQTT broker
-- Handles client authentication
-- Sets up TCP and WebSocket servers
-- Manages client connections and disconnections
+Topics theo định dạng: `home/{roomId}/{deviceId}/{type}`
 
-### 2. MqttHandlerService
-- Processes MQTT messages
-- Handles device control commands
-- Updates device status
-- Manages device connections/disconnections
+Trong đó:
+- `roomId`: ID của phòng chứa thiết bị
+- `deviceId`: ID định danh của thiết bị
+- `type`: Một trong các loại sau:
+  - `status`: Cập nhật trạng thái thiết bị
+  - `control`: Lệnh điều khiển thiết bị
+  - `data`: Dữ liệu cảm biến
+  - `error`: Thông báo lỗi thiết bị
 
-### 3. MqttPublisherService
-- Handles message publishing
-- Manages topic subscriptions
-- Provides message delivery confirmation
+### Chi Tiết Các Topic Điều Khiển
 
-### 4. MqttHeartbeatService
-- Monitors device connectivity
-- Handles device timeouts
-- Updates device online/offline status
+#### 1. Điều Khiển Thiết Bị (`home/{roomId}/{deviceId}/control`)
 
-## Message Types
+Dùng để gửi lệnh đến thiết bị cụ thể. Các lệnh điều khiển phổ biến:
 
-### Device Connection Message
-```typescript
-// Device -> Server
+**Điều Khiển Nguồn:**
+```json
+{
+  "command": "set_status",
+  "value": true,  // true = bật, false = tắt
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+**Điều Khiển Giá Trị:**
+```json
+{
+  "command": "set_value",
+  "value": 75,  // giá trị số (0-100)
+  "unit": "%",  // đơn vị (tùy chọn)
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+**Điều Khiển Màu:**
+```json
+{
+  "command": "set_color",
+  "value": {
+    "r": 255,
+    "g": 128,
+    "b": 0
+  },
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+**Cập Nhật Cấu Hình:**
+```json
+{
+  "command": "update_config",
+  "value": {
+    "updateInterval": 5000,
+    "threshold": 0.5
+  },
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+#### 2. Broadcast Phòng (`home/{roomId}/broadcast`)
+
+Dùng để gửi lệnh đến tất cả thiết bị trong phòng:
+
+**Tắt Tất Cả:**
+```json
+{
+  "command": "turn_off_all",
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+**Bật Tất Cả:**
+```json
+{
+  "command": "turn_on_all",
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+#### 3. Trạng Thái Thiết Bị (`home/{roomId}/{deviceId}/status`)
+
+Dùng để thiết bị báo cáo trạng thái:
+
+**Trạng Thái Kết Nối:**
+```json
 {
   "command": "device_connect",
   "deviceInfo": {
     "ipAddress": "192.168.1.100",
     "macAddress": "AA:BB:CC:DD:EE:FF",
-    "firmwareVersion": "1.0.0"  // optional
+    "firmwareVersion": "1.0.0"
   },
   "timestamp": "2024-01-20T12:00:00Z"
 }
+```
 
-// Server Response
+**Cập Nhật Trạng Thái Định Kỳ:**
+```json
 {
-  "id": "device-123",
-  "name": "Living Room Light",
-  "type": "LIGHT",
-  "status": "ON",
+  "status": true,
+  "value": 75,
+  "brightness": 80,
+  "temperature": 25.5,
+  "humidity": 60,
   "isOnline": true,
   "isConnected": true,
-  "lastSeenAt": "2024-01-20T12:00:00Z",
-  "ipAddress": "192.168.1.100",
-  "macAddress": "AA:BB:CC:DD:EE:FF",
-  "firmwareVersion": "1.0.0"
+  "lastError": null,
+  "timestamp": "2024-01-20T12:00:00Z"
 }
 ```
 
-### Device Control Commands
+#### 4. Dữ Liệu Thiết Bị (`home/{roomId}/{deviceId}/data`)
+
+Dùng cho dữ liệu cảm biến và đo lường:
+
+**Đọc Cảm Biến:**
+```json
+{
+  "measurements": {
+    "temperature": 25.5,
+    "humidity": 60,
+    "pressure": 1013.25
+  },
+  "battery": 85,
+  "rssi": -65,
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+#### 5. Báo Lỗi (`home/{roomId}/{deviceId}/error`)
+
+Dùng để báo cáo lỗi thiết bị:
+
+```json
+{
+  "code": "E001",
+  "message": "Lỗi đọc cảm biến",
+  "severity": "error",
+  "details": {
+    "sensor": "temperature",
+    "attempt": 3
+  },
+  "timestamp": "2024-01-20T12:00:00Z"
+}
+```
+
+### Ký Tự Đại Diện Topic
+
+- Một cấp: `+`
+- Nhiều cấp: `#`
+
+Ví dụ:
+- `home/+/+/status`: Theo dõi trạng thái của tất cả thiết bị
+- `home/{roomId}/+/error`: Theo dõi lỗi của tất cả thiết bị trong phòng
+- `home/{roomId}/{deviceId}/#`: Theo dõi tất cả tin nhắn của một thiết bị
+
+## Các Loại Lệnh
+
 ```typescript
-// Device Status Control
-{
-  "command": "set_status",
-  "value": true | false,
-  "timestamp": "2024-01-20T12:00:00Z"
-}
+enum CommandTypeEnum {
+  // Lệnh Broadcast
+  TURN_OFF_ALL = 'turn_off_all',
+  TURN_ON_ALL = 'turn_on_all',
 
-// Device Brightness Control
-{
-  "command": "set_brightness",
-  "value": 0-100,
-  "timestamp": "2024-01-20T12:00:00Z"
-}
+  // Lệnh Kết Nối
+  DEVICE_CONNECT = 'device_connect',
+  DEVICE_DISCONNECT = 'device_disconnect',
 
-// Device Temperature Control
-{
-  "command": "set_temperature",
-  "value": number,
-  "timestamp": "2024-01-20T12:00:00Z"
-}
+  // Lệnh Unicast
+  SET_STATUS = 'set_status',
+  SET_VALUE = 'set_value', 
+  SET_COLOR = 'set_color',
+  GET_STATUS = 'get_status',
+  GET_INFO = 'get_info',
 
-// Device Speed Control
-{
-  "command": "set_speed",
-  "value": number,
-  "timestamp": "2024-01-20T12:00:00Z"
-}
-
-// Device Value Control
-{
-  "command": "set_value",
-  "value": number,
-  "timestamp": "2024-01-20T12:00:00Z"
+  // Lệnh Cấu Hình
+  UPDATE_CONFIG = 'update_config',
+  SYNC_TIME = 'sync_time'
 }
 ```
 
-### Device Status Updates
+## DTOs
+
+- **DeviceControlBaseDto**: DTO cơ sở cho lệnh điều khiển thiết bị
 ```typescript
-{
-  "status": "on" | "off",
-  "brightness": number,
-  "temperature": number,
-  "speed": number,
-  "value": number,
-  "timestamp": "2024-01-20T12:00:00Z"
+export class DeviceControlBaseDto {
+    @IsUUID()
+    deviceId: string;
+
+    @IsUUID()
+    roomId: string;
+
+    @IsEnum(CommandTypeEnum)
+    command: CommandTypeEnum;
 }
 ```
 
-## Topic Structure
-```
-home/{roomId}/{deviceId}/{type}
-```
+- **DeviceStatusControlDto**: Cho điều khiển trạng thái (bật/tắt)
+- **DeviceValueControlDto**: Cho điều khiển giá trị số
+- **DeviceColorControlDto**: Cho điều khiển màu RGB
+- **DeviceConfigControlDto**: Cho cấu hình thiết bị
+- **DeviceStatusResponseDto**: Cho phản hồi trạng thái thiết bị
 
-### Topic Types
-- `status`: Device status updates
-- `control`: Device control commands
-- `config`: Device configuration
-- `error`: Device error messages
+## Ví Dụ Sử Dụng
 
-## Configuration
+### 1. Gửi Lệnh Điều Khiển
+
 ```typescript
-// mqtt.config.ts
-{
-  host: string;          // MQTT broker host
-  port: number;          // MQTT TCP port
-  wsPort: number;        // MQTT WebSocket port
-  username: string;      // MQTT authentication username
-  password: string;      // MQTT authentication password
-}
+// Inject MQTT service
+constructor(private readonly mqttService: MqttService) {}
+
+// Bật thiết bị
+await mqttService.publishControl(deviceId, {
+  command: CommandTypeEnum.SET_STATUS,
+  value: true
+});
+
+// Đặt độ sáng
+await mqttService.publishControl(deviceId, {
+  command: CommandTypeEnum.SET_VALUE,
+  value: 75
+});
 ```
 
-## Device Control Flow
-1. Client sends control command to `home/{roomId}/{deviceId}/control`
-2. MqttHandlerService processes command
-3. Device state is updated in database
-4. Status update is published to `home/{roomId}/{deviceId}/status`
-5. Connected clients receive status update
+### 2. Broadcast Đến Phòng
 
-## Error Handling
-1. Invalid commands return error message
-2. Device timeout triggers offline status
-3. Connection errors are logged and reported
-4. Authentication failures are tracked
-5. Message validation errors are handled
+```typescript
+// Inject MQTT publisher service
+constructor(private readonly mqttPublisher: MqttPublisherService) {}
 
-## Security
-1. Client authentication required
-2. Topic access control
-3. Message validation
-4. Connection monitoring
-5. Error logging and reporting
+// Tắt tất cả thiết bị trong phòng
+await mqttPublisher.broadcastToRoom(roomId, CommandTypeEnum.TURN_OFF_ALL);
+```
 
-## Monitoring
-1. Device connection status
-2. Message delivery status
-3. Error rates and types
-4. System performance metrics
-5. Client connection statistics
+### 3. Cấu Hình Thiết Bị
 
-## Best Practices
-1. Use appropriate QoS levels
-2. Implement proper error handling
-3. Monitor device health
-4. Validate all messages
-5. Follow security guidelines
-6. Use proper topic structure
-7. Handle reconnection gracefully
+```typescript
+// Cập nhật cấu hình thiết bị
+await mqttService.publishControl(deviceId, {
+  command: CommandTypeEnum.UPDATE_CONFIG,
+  value: {
+    updateInterval: 5000,
+    threshold: 0.5
+  }
+});
+```
 
-## API Integration
-1. Device state synchronization
-2. Command validation
-3. Status persistence
-4. Configuration management
-5. Error reporting
+## Tính Năng Bảo Mật
 
-For more details on implementation, refer to the specific service files and types definitions.
+1. **Xác Thực**
+   - Username/password cho kết nối MQTT
+   - JWT cho REST API endpoints
+
+2. **Kiểm Soát Truy Cập**
+   - Kiểm soát truy cập theo topic
+   - Cô lập thiết bị theo phòng
+
+3. **Giám Sát**
+   - Theo dõi kết nối
+   - Kiểm tra heartbeat thiết bị
+   - Ghi log lỗi
+
+## Xử Lý Lỗi
+
+Module bao gồm xử lý lỗi toàn diện:
+- Lỗi kết nối
+- Kiểm tra tin nhắn
+- Phát hiện timeout thiết bị
+- Kiểm tra lệnh
+- Kiểm tra cấu hình
+
+## Đóng Góp
+
+1. Fork repository
+2. Tạo nhánh tính năng (`git checkout -b feature/tinh-nang-moi`)
+3. Commit thay đổi (`git commit -m 'Thêm tính năng mới'`)
+4. Push lên nhánh (`git push origin feature/tinh-nang-moi`)
+5. Tạo Pull Request
+
+## Giấy Phép
+
+Module này là một phần của dự án Smart Home Backend và được cấp phép theo giấy phép MIT. 

@@ -251,10 +251,12 @@ export abstract class BaseCrudService<T extends IBaseEntity, CreateDTO = DeepPar
         return this.transaction(async (queryRunner) => {
             const processedDto = this.hooks?.beforeUpdate ? await this.hooks.beforeUpdate(id, dto, context) : dto;
 
-            const updatedEntity = await queryRunner.manager.save({
+            const mergedEntity = this.repository.create({
                 ...entity,
                 ...processedDto,
             });
+
+            const updatedEntity = await queryRunner.manager.save(mergedEntity);
 
             return this.hooks?.afterUpdate ? await this.hooks.afterUpdate(updatedEntity, context) : updatedEntity;
         });

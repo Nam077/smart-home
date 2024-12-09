@@ -75,23 +75,12 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
         // Client connected
         this.broker.on('client', (client) => {
             this.logger.log(`Client connected: ${client.id}`);
-
-            if (startsWith(client.id, 'device_')) {
-                const deviceId = replace(client.id, 'device_', '');
-
-                this.updateDeviceConnection(deviceId, true);
-            }
         });
 
         // Client disconnected
         this.broker.on('clientDisconnect', (client) => {
             this.logger.log(`Client disconnected: ${client.id}`);
 
-            if (startsWith(client.id, 'device_')) {
-                const deviceId = replace(client.id, 'device_', '');
-
-                this.updateDeviceConnection(deviceId, false);
-            }
         });
 
         // Subscribe
