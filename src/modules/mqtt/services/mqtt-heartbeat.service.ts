@@ -1,32 +1,62 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 
-import { DeviceService } from '@app/modules/device/services/device.service';
+import { MqttPublisherService } from './mqtt-publisher.service';
 
-import { MqttService } from '../mqtt.service';
+interface DeviceInfo {
+    lastSeen: Date;
+    roomId: string;
+    isOnline: boolean;
+    isConnected: boolean;
+}
 
 @Injectable()
 export class MqttHeartbeatService implements OnModuleInit {
     private readonly logger = new Logger(MqttHeartbeatService.name);
     private readonly offlineThreshold = 60000; // 1 minute
+    private readonly batchSize = 50;
+    private activeDevices: Map<string, DeviceInfo> = new Map();
 
     constructor(
-        private readonly deviceService: DeviceService,
-        private readonly mqttService: MqttService,
+        private readonly mqttPublisher: MqttPublisherService,
     ) {}
 
-    onModuleInit() {
-        this.logger.log('MqttHeartbeatService initialized');
+    async trackDevice(deviceId: string, roomId: string) {
+        this.activeDevices.set(deviceId, {
+            lastSeen: new Date(),
+            roomId,
+            isOnline: true,
+            isConnected: true
+        });
     }
 
-    @Interval(30000) // Check every 30 seconds
+    async untrackDevice(deviceId: string) {
+        this.activeDevices.delete(deviceId);
+    }
+
+    @Interval(3000) // Check every 30 seconds
     async checkDevicesHeartbeat() {
         try {
-            const devices = await this.deviceService.findAll();
+            const now = new Date();
+            const devicesToCheck: string[] = [];
 
-            for (const device of devices) {
-                await this.checkDeviceHeartbeat(device.id);
+            // Chỉ check các devices đang active
+            this.activeDevices.forEach((lastSeen, deviceId) => {
+                const timeDiff = now.getTime() - lastSeen.lastSeen.getTime();
+                if (timeDiff > this.offlineThreshold) {
+                    devicesToCheck.push(deviceId);
+                }
+            });
+
+            // Xử lý theo batch
+            for (let i = 0; i < devicesToCheck.length; i += this.batchSize) {
+                const batch = devicesToCheck.slice(i, i + this.batchSize);
+                await Promise.all(
+                    batch.map(deviceId => this.checkDeviceHeartbeat(deviceId))
+                );
             }
+
+            this.logger.debug(`Checked heartbeat for ${devicesToCheck.length} devices`);
         } catch (error) {
             this.logger.error(`Error checking devices heartbeat: ${error.message}`);
         }
@@ -34,52 +64,50 @@ export class MqttHeartbeatService implements OnModuleInit {
 
     async checkDeviceHeartbeat(deviceId: string): Promise<void> {
         try {
-            const device = await this.deviceService.findById(deviceId);
-
-            if (!device) {
-                this.logger.warn(`Device not found: ${deviceId}`);
-
-                return;
-            }
+            const deviceInfo = this.activeDevices.get(deviceId);
+            if (!deviceInfo) return;
 
             const now = new Date();
-            const lastSeen = device.lastSeenAt || new Date(0);
-            const timeDiff = now.getTime() - lastSeen.getTime();
+            this.logger.warn(`Device ${deviceId} appears to be offline`);
 
-            if (timeDiff > this.offlineThreshold && device.isOnline) {
-                this.logger.warn(`Device ${deviceId} appears to be offline`);
+            // Update device info in map
+            deviceInfo.isOnline = false;
+            deviceInfo.isConnected = false;
+            deviceInfo.lastSeen = now;
 
-                // Update device status
-                device.isOnline = false;
-                device.isConnected = false;
-                await device.save();
+            // Publish status update
+            await this.mqttPublisher.publish({
+                topic: `home/${deviceInfo.roomId}/${deviceId}/status`,
+                payload: JSON.stringify({
+                    deviceId,
+                    status: false,
+                    isOnline: false,
+                    isConnected: false,
+                    lastSeenAt: now.toISOString(),
+                    timestamp: now.toISOString()
+                }),
+                qos: 1
+            });
 
-                // Send heartbeat request
-                await this.mqttService.publishToDevice(deviceId, 'heartbeat', { timestamp: now.toISOString() });
-            }
+            // Remove from tracking
+            this.untrackDevice(deviceId);
         } catch (error) {
             this.logger.error(`Error checking device ${deviceId} heartbeat: ${error.message}`);
         }
     }
 
     async handleHeartbeatResponse(deviceId: string, timestamp: string): Promise<void> {
-        console.log('Heartbeat response received:', deviceId, timestamp);
+        const deviceInfo = this.activeDevices.get(deviceId);
+        if (!deviceInfo) return;
 
-        try {
-            const device = await this.deviceService.findById(deviceId);
+        deviceInfo.lastSeen = new Date();
+        deviceInfo.isOnline = true;
+        deviceInfo.isConnected = true;
 
-            if (!device) {
-                this.logger.warn(`Device not found: ${deviceId}`);
+        this.logger.debug(`Updated heartbeat for device ${deviceId}`);
+    }
 
-                return;
-            }
-
-            device.lastSeenAt = new Date();
-            await device.save();
-
-            this.logger.debug(`Updated heartbeat for device ${deviceId}`);
-        } catch (error) {
-            this.logger.error(`Error handling heartbeat response for device ${deviceId}: ${error.message}`);
-        }
+    async onModuleInit() {
+        this.logger.log('MqttHeartbeatService initialized');
     }
 }
