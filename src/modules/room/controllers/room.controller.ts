@@ -17,13 +17,13 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@ne
 import { PaginatedResponseDto } from '@app/common/dto/paginated-response.dto';
 import { PaginationDto } from '@app/common/dto/pagination.dto';
 import { IPaginatedResponse } from '@app/common/interfaces/crud.interface';
+import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
+import { User } from '@app/modules/user/entities/user.entity';
 
 import { CreateRoomDto, CreateRoomUserDto } from '../dto/create-room.dto';
 import { Room } from '../entities/room.entity';
 import { RoomService } from '../services/room.service';
-import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
-import { User } from '@app/modules/user/entities/user.entity';
-import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
 
 @ApiTags('Rooms')
 @Controller('rooms')
@@ -39,7 +39,6 @@ export class RoomController {
         return this.roomService.create(createRoomDto);
     }
 
-
     @Post('user')
     @ApiOperation({ summary: 'Create a new room for user' })
     @ApiResponse({ status: HttpStatus.CREATED, description: 'Room created successfully', type: Room })
@@ -48,9 +47,9 @@ export class RoomController {
     @ApiBearerAuth()
     @UseGuards(JwtAuthGuard)
     async createForUser(@Body() createRoomDto: CreateRoomUserDto, @CurrentUser() user: User): Promise<Room> {
-        
         return this.roomService.createForUser(createRoomDto, user);
     }
+
     @Get('user')
     @ApiOperation({ summary: 'Get all rooms by user' })
     @UseGuards(JwtAuthGuard)
@@ -72,8 +71,6 @@ export class RoomController {
     async findAll(@Query() query: PaginationDto): Promise<IPaginatedResponse<Room>> {
         return this.roomService.findWithPagination(query);
     }
-
- 
 
     @Get(':id')
     @ApiOperation({ summary: 'Get room by ID' })

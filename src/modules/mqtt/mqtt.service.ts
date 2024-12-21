@@ -5,7 +5,6 @@ import { ConfigService } from '@nestjs/config';
 import Aedes from 'aedes';
 import { createBroker } from 'aedes';
 import { createServer } from 'aedes-server-factory';
-import { startsWith, replace } from 'lodash';
 
 import { Device } from '@app/modules/device/entities/device.entity';
 import { DeviceService } from '@app/modules/device/services/device.service';
@@ -18,8 +17,8 @@ import {
 } from './dto/device-control.dto';
 import { IMqttPublisher } from './interfaces/mqtt-publisher.interface';
 import { MqttHandlerService } from './services/mqtt-handler.service';
-import { MqttPublisherService } from './services/mqtt-publisher.service';
 import { CommandTypeEnum } from './types/mqtt.types';
+import { MqttPublisherService } from '@app/modules/global/services/mqtt-publisher.service';
 
 interface IAuthenticateError extends Error {
     returnCode: number;
@@ -55,18 +54,22 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
 
         this.server = createServer(this.broker);
         this.server.listen(port, () => {
-            this.logger.log(this.formatLogMessage('SERVER_STARTED', {
-                type: 'TCP',
-                port
-            }));
+            this.logger.log(
+                this.formatLogMessage('SERVER_STARTED', {
+                    type: 'TCP',
+                    port,
+                }),
+            );
         });
 
         this.wsServer = createServer(this.broker, { ws: true });
         this.wsServer.listen(wsPort, () => {
-            this.logger.log(this.formatLogMessage('SERVER_STARTED', {
-                type: 'WebSocket',
-                port: wsPort
-            }));
+            this.logger.log(
+                this.formatLogMessage('SERVER_STARTED', {
+                    type: 'WebSocket',
+                    port: wsPort,
+                }),
+            );
         });
     }
 
@@ -81,27 +84,33 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
 
     private setupEventHandlers() {
         this.broker.on('client', (client) => {
-            this.logger.log(this.formatLogMessage('CLIENT_CONNECTED', {
-                clientId: client.id,
-                timestamp: new Date().toISOString()
-            }));
+            this.logger.log(
+                this.formatLogMessage('CLIENT_CONNECTED', {
+                    clientId: client.id,
+                    timestamp: new Date().toISOString(),
+                }),
+            );
         });
 
         this.broker.on('clientDisconnect', (client) => {
-            this.logger.log(this.formatLogMessage('CLIENT_DISCONNECTED', {
-                clientId: client.id,
-                timestamp: new Date().toISOString()
-            }));
+            this.logger.log(
+                this.formatLogMessage('CLIENT_DISCONNECTED', {
+                    clientId: client.id,
+                    timestamp: new Date().toISOString(),
+                }),
+            );
         });
 
         this.broker.on('subscribe', (subscriptions, client) => {
-            this.logger.debug(this.formatLogMessage('CLIENT_SUBSCRIBED', {
-                clientId: client.id,
-                subscriptions: subscriptions.map(sub => ({
-                    topic: sub.topic,
-                    qos: sub.qos
-                }))
-            }));
+            this.logger.debug(
+                this.formatLogMessage('CLIENT_SUBSCRIBED', {
+                    clientId: client.id,
+                    subscriptions: subscriptions.map((sub) => ({
+                        topic: sub.topic,
+                        qos: sub.qos,
+                    })),
+                }),
+            );
         });
 
         this.broker.on('publish', async (packet, client) => {
@@ -115,27 +124,33 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
                 const messageType = topicParts[topicParts.length - 1];
 
                 if (messageType === 'status') {
-                    this.logger.debug(this.formatLogMessage('STATUS_MESSAGE_RECEIVED', {
-                        clientId: client.id,
-                        topic,
-                        payload,
-                        timestamp: new Date().toISOString()
-                    }));
+                    this.logger.debug(
+                        this.formatLogMessage('STATUS_MESSAGE_RECEIVED', {
+                            clientId: client.id,
+                            topic,
+                            payload,
+                            timestamp: new Date().toISOString(),
+                        }),
+                    );
                 } else {
-                    this.logger.debug(this.formatLogMessage('MESSAGE_RECEIVED', {
-                        clientId: client.id,
-                        topic,
-                        messageType
-                    }));
+                    this.logger.debug(
+                        this.formatLogMessage('MESSAGE_RECEIVED', {
+                            clientId: client.id,
+                            topic,
+                            messageType,
+                        }),
+                    );
                 }
 
                 await this.mqttHandler.handleMessage(topic, payload, client.id);
             } catch (error) {
-                this.logger.error(this.formatLogMessage('MESSAGE_PROCESSING_ERROR', {
-                    clientId: client?.id,
-                    error: error.message,
-                    stack: error.stack
-                }));
+                this.logger.error(
+                    this.formatLogMessage('MESSAGE_PROCESSING_ERROR', {
+                        clientId: client?.id,
+                        error: error.message,
+                        stack: error.stack,
+                    }),
+                );
             }
         });
 
@@ -148,23 +163,30 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
                 (username === mqttUsername && password?.toString() === mqttPassword);
 
             if (isAuthenticated) {
-                this.logger.debug(this.formatLogMessage('AUTHENTICATION_SUCCESS', {
-                    clientId: client.id,
-                    username
-                }));
+                this.logger.debug(
+                    this.formatLogMessage('AUTHENTICATION_SUCCESS', {
+                        clientId: client.id,
+                        username,
+                    }),
+                );
                 callback(null, true);
             } else {
-                this.logger.warn(this.formatLogMessage('AUTHENTICATION_FAILED', {
-                    clientId: client.id,
-                    username,
-                    reason: 'Invalid credentials'
-                }));
+                this.logger.warn(
+                    this.formatLogMessage('AUTHENTICATION_FAILED', {
+                        clientId: client.id,
+                        username,
+                        reason: 'Invalid credentials',
+                    }),
+                );
 
-                callback({
-                    name: 'AuthenticateError',
-                    message: 'Authentication failed',
-                    returnCode: 4,
-                } as IAuthenticateError, false);
+                callback(
+                    {
+                        name: 'AuthenticateError',
+                        message: 'Authentication failed',
+                        returnCode: 4,
+                    } as IAuthenticateError,
+                    false,
+                );
             }
         };
     }
@@ -175,6 +197,7 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
 
             if (!device) {
                 this.logger.warn(this.formatLogMessage('DEVICE_NOT_FOUND', { deviceId }));
+
                 return;
             }
 
@@ -182,16 +205,20 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
             device.lastSeenAt = new Date();
             await device.save();
 
-            this.logger.debug(this.formatLogMessage('DEVICE_CONNECTION_UPDATED', {
-                deviceId,
-                isConnected,
-                lastSeenAt: device.lastSeenAt
-            }));
+            this.logger.debug(
+                this.formatLogMessage('DEVICE_CONNECTION_UPDATED', {
+                    deviceId,
+                    isConnected,
+                    lastSeenAt: device.lastSeenAt,
+                }),
+            );
         } catch (error) {
-            this.logger.error(this.formatLogMessage('CONNECTION_UPDATE_ERROR', {
-                deviceId,
-                error: error.message
-            }));
+            this.logger.error(
+                this.formatLogMessage('CONNECTION_UPDATE_ERROR', {
+                    deviceId,
+                    error: error.message,
+                }),
+            );
         }
     }
 

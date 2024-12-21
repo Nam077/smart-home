@@ -13,6 +13,7 @@ export enum CommandTypeEnum {
     SET_COLOR = 'set_color',
     GET_STATUS = 'get_status',
     GET_INFO = 'get_info',
+    GET_DEVICE = 'get_device',
 
     // Config Commands
     UPDATE_CONFIG = 'update_config',
@@ -26,6 +27,8 @@ export enum TopicTypeEnum {
     STATUS = 'status',
     DATA = 'data',
     ERROR = 'error',
+    GET_DEVICE = 'get_device',
+    REQUEST_DEVICES = 'request_devices',
 }
 
 export interface IBaseMessage {

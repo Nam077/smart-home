@@ -7,22 +7,12 @@ import { split, map, values } from 'lodash';
 
 import { Device } from '@app/modules/device/entities/device.entity';
 import { DeviceService } from '@app/modules/device/services/device.service';
+import { User } from '@app/modules/user/entities/user.entity';
 
-import { MqttPublisherService } from './mqtt-publisher.service';
 import { MqttHeartbeatService } from './mqtt-heartbeat.service';
-import {
-    DeviceStatusControlDto,
-    DeviceValueControlDto,
-    DeviceStatusResponseDto,
-} from '../dto/device-control.dto';
-import {
-    TopicTypeEnum,
-    CommandTypeEnum,
-    ICommandMessage,
-    IStatusMessage,
-    IConfigMessage,
-    IDeviceInfo,
-} from '../types/mqtt.types';
+import { DeviceStatusControlDto, DeviceValueControlDto } from '../dto/device-control.dto';
+import { TopicTypeEnum, CommandTypeEnum, ICommandMessage, IStatusMessage, IConfigMessage } from '../types/mqtt.types';
+import { MqttPublisherService } from '@app/modules/global/services/mqtt-publisher.service';
 
 @Injectable()
 export class MqttHandlerService {
@@ -116,7 +106,6 @@ export class MqttHandlerService {
         }
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private async handleBroadcast(roomId: string, message: ICommandMessage): Promise<void> {
         try {
             const devices = await this.deviceService.findByRoomId(roomId);
@@ -131,19 +120,20 @@ export class MqttHandlerService {
 
                         // Publish status update
                         await this.mqttPublisher.publish({
-                            topic: `home/${roomId}/${device.id}/status`,
+                            topic: `home/${roomId}/${device.id}/${device.type}/status`,
                             payload: JSON.stringify({
                                 deviceId: device.id,
                                 status: true,
                                 isOnline: device.isOnline,
                                 isConnected: device.isConnected,
                                 lastSeenAt: device.lastSeenAt,
-                                timestamp: now.toISOString()
+                                timestamp: now.toISOString(),
                             }),
                             qos: 1,
-                            retain: false
+                            retain: false,
                         });
                     }
+
                     break;
 
                 case CommandTypeEnum.TURN_OFF_ALL:
@@ -154,23 +144,25 @@ export class MqttHandlerService {
 
                         // Publish status update
                         await this.mqttPublisher.publish({
-                            topic: `home/${roomId}/${device.id}/status`,
+                            topic: `home/${roomId}/${device.id}/${device.type}/status`,
                             payload: JSON.stringify({
                                 deviceId: device.id,
                                 status: false,
                                 isOnline: device.isOnline,
                                 isConnected: device.isConnected,
                                 lastSeenAt: device.lastSeenAt,
-                                timestamp: now.toISOString()
+                                timestamp: now.toISOString(),
                             }),
                             qos: 1,
-                            retain: false
+                            retain: false,
                         });
                     }
+
                     break;
 
                 case CommandTypeEnum.SET_VALUE: {
                     const value = Number(message.value);
+
                     for (const device of devices) {
                         if (device.value !== undefined) {
                             device.value = value;
@@ -179,20 +171,21 @@ export class MqttHandlerService {
 
                             // Publish status update
                             await this.mqttPublisher.publish({
-                                topic: `home/${roomId}/${device.id}/status`,
+                                topic: `home/${roomId}/${device.id}/${device.type}/status`,
                                 payload: JSON.stringify({
                                     deviceId: device.id,
                                     value: value,
                                     isOnline: device.isOnline,
                                     isConnected: device.isConnected,
                                     lastSeenAt: device.lastSeenAt,
-                                    timestamp: now.toISOString()
+                                    timestamp: now.toISOString(),
                                 }),
                                 qos: 1,
-                                retain: false
+                                retain: false,
                             });
                         }
                     }
+
                     break;
                 }
 
@@ -268,7 +261,7 @@ export class MqttHandlerService {
             const statusMessage = {
                 deviceId: device.id,
                 timestamp: new Date().toISOString(),
-                ...changedFields
+                ...changedFields,
             };
 
             await this.mqttPublisher.publish({
@@ -278,16 +271,20 @@ export class MqttHandlerService {
                 retain: false,
             });
 
-            this.logger.debug(this.formatLogMessage('STATUS_PUBLISHED', {
-                deviceId: device.id,
-                changedFields: Object.keys(changedFields),
-                status: statusMessage
-            }));
+            this.logger.debug(
+                this.formatLogMessage('STATUS_PUBLISHED', {
+                    deviceId: device.id,
+                    changedFields: Object.keys(changedFields),
+                    status: statusMessage,
+                }),
+            );
         } catch (error) {
-            this.logger.error(this.formatLogMessage('PUBLISH_STATUS_ERROR', {
-                deviceId: device.id,
-                error: error.message
-            }));
+            this.logger.error(
+                this.formatLogMessage('PUBLISH_STATUS_ERROR', {
+                    deviceId: device.id,
+                    error: error.message,
+                }),
+            );
         }
     }
 
@@ -297,12 +294,15 @@ export class MqttHandlerService {
         fs.appendFile('control.log', `${JSON.stringify(payload)}\n`, (err) => {
             if (err) console.error(err);
         });
+
         let device: Device | null = null;
 
         try {
+            // Tìm thiết bị theo deviceId
             device = await this.deviceService.findOne({ where: { id: deviceId }, relations: ['room'] });
 
             if (!device) {
+                this.logger.error(`Device not found: ${deviceId}`);
                 throw new Error(`Device not found: ${deviceId}`);
             }
 
@@ -314,47 +314,6 @@ export class MqttHandlerService {
             const now = new Date();
 
             switch (payload.command) {
-                case CommandTypeEnum.DEVICE_CONNECT: {
-                    const changes: Record<string, any> = {
-                        isOnline: true,
-                        isConnected: true
-                    };
-
-                    if (payload.deviceInfo) {
-                        if (payload.deviceInfo.ipAddress !== device.ipAddress) {
-                            changes.ipAddress = payload.deviceInfo.ipAddress;
-                        }
-                        if (payload.deviceInfo.macAddress !== device.macAddress) {
-                            changes.macAddress = payload.deviceInfo.macAddress;
-                        }
-                        if (payload.deviceInfo.firmwareVersion !== device.firmwareVersion) {
-                            changes.firmwareVersion = payload.deviceInfo.firmwareVersion;
-                        }
-                    }
-
-                    Object.assign(device, changes);
-                    device.isOnline = true;
-                    device.isConnected = true;
-                    await device.save();
-                    
-                    await this.mqttHeartbeat.trackDevice(deviceId, device.room.id);
-                    break;
-                }
-
-                case CommandTypeEnum.DEVICE_DISCONNECT: {
-                    const changes = {
-                        isOnline: false,
-                        isConnected: false
-                    };
-                    Object.assign(device, changes);
-                    device.isOnline = false;
-                    device.isConnected = false;
-                    await device.save();
-
-                    await this.mqttHeartbeat.untrackDevice(deviceId);
-                    break;
-                }
-
                 case CommandTypeEnum.SET_STATUS:
                     dto = plainToClass(DeviceStatusControlDto, {
                         ...payload,
@@ -362,6 +321,7 @@ export class MqttHandlerService {
                         roomId: device.room.id,
                         value: payload.value === 'toggle' ? !device.status : Boolean(payload.value),
                     });
+
                     device.status = Boolean(dto.value);
                     device.lastSeenAt = now;
                     break;
@@ -373,21 +333,23 @@ export class MqttHandlerService {
                         roomId: device.room.id,
                         value: Number(payload.value),
                     });
+
                     device.value = Number(dto.value);
                     device.lastSeenAt = now;
                     break;
 
-                case CommandTypeEnum.UPDATE_CONFIG: {
+                case CommandTypeEnum.UPDATE_CONFIG:
                     const newConfig = {
                         ...device.config,
                         ...payload.value,
-                        updatedAt: now
+                        updatedAt: now,
                     };
+
                     if (JSON.stringify(device.config) !== JSON.stringify(newConfig)) {
                         device.config = newConfig;
                     }
+
                     break;
-                }
             }
 
             if (dto) {
@@ -395,6 +357,7 @@ export class MqttHandlerService {
                     await validateOrReject(dto);
                 } catch (validationErrors) {
                     const errors = map(validationErrors, (error) => values(error.constraints)).flat();
+
                     throw new Error(`Validation failed: ${errors.join(', ')}`);
                 }
             }
@@ -402,7 +365,7 @@ export class MqttHandlerService {
             device.lastSeenAt = now;
             await device.save();
 
-            // Prepare status message with full device info
+            // Chuẩn bị message trạng thái và gửi lên MQTT
             const statusMessage = {
                 deviceId: device.id,
                 status: device.status,
@@ -418,10 +381,9 @@ export class MqttHandlerService {
                 model: device.model,
                 serialNumber: device.serialNumber,
                 firmwareVersion: device.firmwareVersion,
-                timestamp: now.toISOString()
+                timestamp: now.toISOString(),
             };
 
-            // Publish updated device status
             await this.mqttPublisher.publish({
                 topic: `home/${device.room.id}/${deviceId}/status`,
                 payload: JSON.stringify(statusMessage),
@@ -431,11 +393,13 @@ export class MqttHandlerService {
 
             return device;
         } catch (error) {
-            this.logger.error(this.formatLogMessage('CONTROL_ERROR', {
-                deviceId,
-                command: payload.command,
-                error: error.message
-            }));
+            this.logger.error(
+                this.formatLogMessage('CONTROL_ERROR', {
+                    deviceId,
+                    command: payload.command,
+                    error: error.message,
+                }),
+            );
 
             if (device) {
                 device.lastErrorAt = new Date();
@@ -446,6 +410,131 @@ export class MqttHandlerService {
             }
 
             throw error;
+        }
+    }
+
+    private async handleDeviceInfoRequest(roomId: string, deviceId: string): Promise<void> {
+        try {
+            // Tìm thiết bị theo deviceId
+            const device = await this.deviceService.findOne({ where: { id: deviceId }, relations: ['room'] });
+
+            if (!device) {
+                this.logger.warn(`Device not found: ${deviceId}`);
+
+                return;
+            }
+
+            // Chuẩn bị payload chứa thông tin thiết bị
+            const deviceInfo = {
+                deviceId: device.id,
+                roomId: device.room.id,
+                status: device.status,
+                value: device.value,
+                config: device.config,
+                isConnected: device.isConnected,
+                lastSeenAt: device.lastSeenAt?.toISOString(),
+                unit: device.unit,
+                manufacturer: device.manufacturer,
+                model: device.model,
+                serialNumber: device.serialNumber,
+                firmwareVersion: device.firmwareVersion,
+                timestamp: new Date().toISOString(),
+            };
+
+            // Gửi thông tin qua MQTT tới ESP
+            await this.mqttPublisher.publish({
+                topic: `home/${roomId}/${deviceId}/info`,
+                payload: JSON.stringify(deviceInfo),
+                qos: 1,
+                retain: false,
+            });
+
+            this.logger.debug(
+                this.formatLogMessage('DEVICE_INFO_SENT', {
+                    deviceId,
+                    roomId,
+                    topic: `home/${roomId}/${deviceId}/info`,
+                    info: deviceInfo,
+                }),
+            );
+        } catch (error) {
+            this.logger.error(
+                this.formatLogMessage('DEVICE_INFO_ERROR', {
+                    deviceId,
+                    roomId,
+                    error: error.message,
+                }),
+            );
+            throw error;
+        }
+    }
+
+    private async handleRequestDeviceList(controllerId: string, user: User, payload: ICommandMessage): Promise<void> {
+        this.logger.debug(`Processing control command: ${JSON.stringify(payload)}`);
+
+        fs.appendFile('control.log', `${JSON.stringify(payload)}\n`, (err) => {
+            if (err) console.error(err);
+        });
+
+        try {
+            // Kiểm tra controllerId và user
+            if (!controllerId) {
+                throw new Error('Controller ID is required for device list request');
+            }
+
+            if (!user) {
+                throw new Error('User information is required for device list request');
+            }
+
+            // Lấy danh sách thiết bị theo controllerId và user
+            const devices = await this.deviceService.findByControllerId(controllerId, user);
+
+            if (!devices || devices.length === 0) {
+                this.logger.warn(`No devices found for controller: ${controllerId} and user: ${user.id}`);
+
+                return;
+            }
+
+            // Tạo payload chứa danh sách thiết bị
+            const deviceList = devices.map((device) => ({
+                id: device.id,
+                name: device.name,
+                type: device.type,
+                status: device.status,
+                value: device.value,
+                isConnected: device.isConnected,
+                lastSeenAt: device.lastSeenAt?.toISOString(),
+            }));
+
+            const payload = {
+                controllerId,
+                devices: deviceList,
+                timestamp: new Date().toISOString(),
+            };
+
+            // Gửi danh sách thiết bị qua MQTT
+            await this.mqttPublisher.publish({
+                topic: `home/${controllerId}/response/devices`,
+                payload: JSON.stringify(payload),
+                qos: 1,
+                retain: false,
+            });
+
+            this.logger.debug(
+                this.formatLogMessage('DEVICE_LIST_RESPONSE_SENT', {
+                    controllerId,
+                    userId: user.id,
+                    devices: deviceList,
+                }),
+            );
+        } catch (error) {
+            this.logger.error(
+                this.formatLogMessage('DEVICE_LIST_RESPONSE_ERROR', {
+                    controllerId,
+                    userId: user.id,
+                    error: error.message,
+                }),
+            );
         }
     }
 }

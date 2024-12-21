@@ -7,13 +7,14 @@ import { BaseCrudService } from '@app/common/services/base-crud.service';
 import { ControllerService } from '@app/modules/controller/services/controller.service';
 import { CreateDeviceDto, CreateDeviceUserDto } from '@app/modules/device/dto/create-device.dto';
 import { RoomService } from '@app/modules/room/services/room.service';
+import { User } from '@app/modules/user/entities/user.entity';
 import { UserService } from '@app/modules/user/services/user.service';
 
 import { Device } from '../entities/device.entity';
-import { User } from '@app/modules/user/entities/user.entity';
 
 @Injectable()
 export class DeviceService extends BaseCrudService<Device> {
+    [x: string]: any;
     constructor(
         @InjectRepository(Device)
         private readonly deviceRepository: Repository<Device>,
@@ -38,8 +39,8 @@ export class DeviceService extends BaseCrudService<Device> {
     }
 
     async findByControllerId(controllerId: string, user: User): Promise<Device[]> {
-        const controller = await this.controllerService.findOne({ where: { id: controllerId , user: { id: user.id } } });
-        
+        const controller = await this.controllerService.findOne({ where: { id: controllerId, user: { id: user.id } } });
+
         if (!controller) {
             throw new NotFoundException(`Controller not found: ${controllerId}`);
         }
@@ -48,8 +49,24 @@ export class DeviceService extends BaseCrudService<Device> {
             where: { controller: { id: controllerId } },
             relations: {
                 room: true,
-                controller: true
-            }
+                controller: true,
+            },
+        });
+    }
+
+    async findDeviceByControllerId(controllerId: string): Promise<Device[]> {
+        const controller = await this.controllerService.findOne({ where: { id: controllerId } });
+
+        if (!controller) {
+            throw new NotFoundException(`Controller not found: ${controllerId}`);
+        }
+
+        return await this.findAll({
+            where: { controller: { id: controllerId } },
+            relations: {
+                room: true,
+                controller: true,
+            },
         });
     }
 
@@ -98,6 +115,7 @@ export class DeviceService extends BaseCrudService<Device> {
             return device;
         });
     }
+
     async createForUser(
         createDeviceDto: CreateDeviceUserDto,
         currentUser: User,
@@ -140,6 +158,7 @@ export class DeviceService extends BaseCrudService<Device> {
             return device;
         });
     }
+
     override async update(id: string, updateDeviceDto: any): Promise<Device> {
         return this.transaction(async (queryRunner) => {
             const device = await this.findOne({
@@ -147,8 +166,8 @@ export class DeviceService extends BaseCrudService<Device> {
                 relations: {
                     room: true,
                     controller: true,
-                    user: true
-                }
+                    user: true,
+                },
             });
 
             if (!device) {
@@ -157,19 +176,24 @@ export class DeviceService extends BaseCrudService<Device> {
 
             if (updateDeviceDto.roomId && device.room.id !== updateDeviceDto.roomId) {
                 const room = await this.roomService.findById(updateDeviceDto.roomId);
+
                 device.room = room;
             }
+
             if (updateDeviceDto.controllerId && device.controller.id !== updateDeviceDto.controllerId) {
                 const controller = await this.controllerService.findById(updateDeviceDto.controllerId);
+
                 device.controller = controller;
             }
+
             if (updateDeviceDto.userId && device.user.id !== updateDeviceDto.userId) {
                 const user = await this.userService.findById(updateDeviceDto.userId);
+
                 device.user = user;
             }
 
             if (this.hooks?.beforeUpdate) {
-                await this.hooks.beforeUpdate(id, updateDeviceDto)
+                await this.hooks.beforeUpdate(id, updateDeviceDto);
             }
 
             await queryRunner.manager.save(device);
@@ -179,8 +203,6 @@ export class DeviceService extends BaseCrudService<Device> {
             }
 
             return device;
-
-
         });
     }
 }

@@ -75,7 +75,6 @@ export class CreateDeviceDto {
     @IsOptional()
     description?: string;
 
-
     @ApiProperty({
         description: 'Device manufacturer',
         example: 'Sonoff',
@@ -184,6 +183,6 @@ export class CreateDeviceDto {
 
 /**
  * DTO for creating a device by a user
- * Omits userId as it will be automatically set from the authenticated user
+ * Omits userId as it will be automatically set from the authenticated user.
  */
 export class CreateDeviceUserDto extends OmitType(CreateDeviceDto, ['userId']) {}

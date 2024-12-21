@@ -16,24 +16,23 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@ne
 
 import { PaginationDto } from '@app/common/dto/pagination.dto';
 import { IPaginatedResponse } from '@app/common/interfaces/crud.interface';
+import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
+import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
+import { UpdateDeviceDto } from '@app/modules/device/dto/update-device.dto';
+import { User } from '@app/modules/user/entities/user.entity';
 
 import { CreateDeviceDto, CreateDeviceUserDto } from '../dto/create-device.dto';
 import { Device } from '../entities/device.entity';
 import { DeviceService } from '../services/device.service';
-import { UpdateDeviceDto } from '@app/modules/device/dto/update-device.dto';
-import { JwtAuthGuard } from '@app/modules/auth/guards/jwt-auth.guard';
-import { CurrentUser } from '@app/modules/auth/decorators/current-user.decorator';
-import { User } from '@app/modules/user/entities/user.entity';
 
 @ApiTags('Devices')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('devices')
-
 export class DeviceController {
     constructor(private readonly deviceService: DeviceService) {}
 
     @Post()
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Create a new device' })
     @ApiResponse({ status: HttpStatus.CREATED, description: 'Device created successfully', type: Device })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
@@ -43,6 +42,8 @@ export class DeviceController {
     }
 
     @Post('user')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Create a new device' })
     @ApiResponse({ status: HttpStatus.CREATED, description: 'Device created successfully', type: Device })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
@@ -52,6 +53,8 @@ export class DeviceController {
     }
 
     @Get()
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get all devices with pagination' })
     @ApiResponse({
         status: HttpStatus.OK,
@@ -64,6 +67,8 @@ export class DeviceController {
     }
 
     @Get(':id')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get device by ID' })
     @ApiParam({ name: 'id', description: 'Device ID', type: String, format: 'uuid' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Device retrieved successfully', type: Device })
@@ -74,6 +79,8 @@ export class DeviceController {
     }
 
     @Get('room/:roomId')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Get devices by room id' })
     findByRoomId(@Param('roomId', ParseUUIDPipe) roomId: string) {
         return this.deviceService.findByRoomId(roomId);
@@ -87,21 +94,28 @@ export class DeviceController {
         return this.deviceService.findByControllerId(controllerId, user);
     }
 
+    @Get('controller/:controllerId/device')
+    @ApiOperation({ summary: 'Get devices by controller id' })
+    findDeviceByControllerId(@Param('controllerId', ParseUUIDPipe) controllerId: string) {
+        return this.deviceService.findDeviceByControllerId(controllerId);
+    }
+
     @Patch(':id')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Update device by ID' })
     @ApiParam({ name: 'id', description: 'Device ID', type: String, format: 'uuid' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Device updated successfully', type: Device })
     @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Device not found' })
     @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
     @ApiResponse({ status: HttpStatus.FORBIDDEN, description: 'Permission denied' })
-    async update(
-        @Param('id', ParseUUIDPipe) id: string,
-        @Body() updateDeviceDto: UpdateDeviceDto,
-    ): Promise<Device> {
+    async update(@Param('id', ParseUUIDPipe) id: string, @Body() updateDeviceDto: UpdateDeviceDto): Promise<Device> {
         return this.deviceService.update(id, updateDeviceDto);
     }
 
     @Delete(':id')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Soft delete device by ID' })
     @ApiParam({ name: 'id', description: 'Device ID', type: String, format: 'uuid' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Device deleted successfully' })
@@ -112,6 +126,8 @@ export class DeviceController {
     }
 
     @Delete(':id/hard')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Hard delete device by ID' })
     @ApiParam({ name: 'id', description: 'Device ID', type: String, format: 'uuid' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Device permanently deleted successfully' })
@@ -122,6 +138,8 @@ export class DeviceController {
     }
 
     @Put(':id/restore')
+    @ApiBearerAuth()
+    @UseGuards(JwtAuthGuard)
     @ApiOperation({ summary: 'Restore soft-deleted device' })
     @ApiParam({ name: 'id', description: 'Device ID', type: String, format: 'uuid' })
     @ApiResponse({ status: HttpStatus.OK, description: 'Device restored successfully', type: Device })
