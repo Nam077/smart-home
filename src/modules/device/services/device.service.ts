@@ -205,4 +205,12 @@ export class DeviceService extends BaseCrudService<Device> {
             return device;
         });
     }
+
+    async save(device: Device): Promise<Device> {
+        return this.deviceRepository.save(device);
+    }
+
+    async saveMany(devices: Device[]): Promise<Device[]> {
+        return this.deviceRepository.save(devices);
+    }
 }

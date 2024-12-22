@@ -54,7 +54,7 @@ export class MqttHeartbeatService implements OnModuleInit {
                 await Promise.all(batch.map((deviceId) => this.checkDeviceHeartbeat(deviceId)));
             }
 
-            this.logger.debug(`Checked heartbeat for ${devicesToCheck.length} devices`);
+            // this.logger.debug(`Checked heartbeat for ${devicesToCheck.length} devices`);
         } catch (error) {
             this.logger.error(`Error checking devices heartbeat: ${error.message}`);
         }

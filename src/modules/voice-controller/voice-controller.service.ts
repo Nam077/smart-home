@@ -1,170 +1,201 @@
 import { Injectable } from '@nestjs/common';
-import Fuse from 'fuse.js';
 
 import { DeviceService } from '@app/modules/device/services/device.service';
 import { CreateVoiceControllerDto } from '@app/modules/voice-controller/dto/create-voice-controller.dto';
 import { MqttPublisherService } from '@app/modules/global/services/mqtt-publisher.service';
 import { CommandTypeEnum } from '@app/modules/mqtt/types/mqtt.types';
+import { AIService } from '@app/modules/global/services/ai.service';
+import { Device } from '@app/modules/device/entities/device.entity';
+
+interface DeviceClean {
+    id: string;
+    name: string;
+    roomName: string;
+    status: number;  // 0 or 1
+    value: number;
+    unit: string;
+}
+
+export interface AIControlResponse {
+    type: 'control';
+    d: Array<{
+        i: string;   // id
+        s: number;   // status (0 or 1)
+        v: number;   // value
+    }>;
+}
+
+export interface AIInfoResponse {
+    type: 'info';
+    text: string;    // Text response about device status
+}
+
+export type AIResponse = AIControlResponse | AIInfoResponse;
 
 @Injectable()
 export class VoiceControllerService {
-    private readonly turnOnKeywords = ['bật', 'mở', 'on', 'turn on'];
-    private readonly turnOffKeywords = ['tắt', 'đóng', 'off', 'turn off']
-    private readonly roomKeywords = ['phòng', 'room'];
+    constructor(
+        private readonly deviceService: DeviceService,
+        private readonly mqttPublisher: MqttPublisherService,
+        private readonly geminiAIService: AIService,
+    ) { }
 
-    constructor(private readonly deviceService: DeviceService, private readonly mqttPublisher: MqttPublisherService) {}
-
-    private findBestMatch(searchText: string, items: Array<{ name: string }>, threshold = 0.3): { name: string, score: number } | null {
-        const fuseOptions = {
-            includeScore: true,
-            threshold: threshold,
-            keys: ['name']
-        };
-
-        const fuse = new Fuse(items, fuseOptions);
-        const results = fuse.search(searchText);
-
-        if (results.length > 0) {
-            const bestMatch = results[0];
-            return {
-                name: bestMatch.item.name,
-                score: bestMatch.score || 1
-            };
-        }
-
-        return null;
-    }
-
-    private extractSearchableText(command: string): string {
-        // Remove control keywords
-        let searchText = command;
-        [...this.turnOnKeywords, ...this.turnOffKeywords, ...this.roomKeywords].forEach(keyword => {
-            searchText = searchText.replace(keyword, '');
-        });
-        return searchText.trim();
-    }
-
-    async handler(createVoiceControllerDto: CreateVoiceControllerDto) {
+    async handler(createVoiceControllerDto: CreateVoiceControllerDto): Promise<string> {
         const devices = await this.deviceService.findDeviceByControllerId(createVoiceControllerDto.controllerId);
-        
         if (!devices || devices.length === 0) {
             throw new Error('No devices found for this controller');
         }
 
-        const command = createVoiceControllerDto.text.toLowerCase();
-        let isOn: boolean | null = null;
+        const deviceClean = cleanDevice(devices);
+        const { text } = createVoiceControllerDto;
 
-        // Check if command contains turn on keywords
-        for (const keyword of this.turnOnKeywords) {
-            if (command.includes(keyword)) {
-                isOn = true;
-                break;
-            }
-        }
+        // Create minimal context with status
+        const context = deviceClean.map(d => `${d.name}|${d.roomName}>${d.id}:${d.status}:${d.value}${d.unit}`).join(',');
 
-        // Check if command contains turn off keywords
-        if (isOn === null) {
-            for (const keyword of this.turnOffKeywords) {
-                if (command.includes(keyword)) {
-                    isOn = false;
-                    break;
-                }
-            }
-        }
+        console.log(context);
 
-        if (isOn === null) {
-            throw new Error('No valid command found in voice input');
-        }
+        // Define response formats
+        const controlFormat = `{"type":"control","d":[{"i":"id","s":0|1,"v":number}]}`;
+        const infoFormat = `{"type":"info","text":"[nội dung trả lời]"}`;
 
-        // Check if this is a room-level command
-        let isRoomCommand = false;
-        for (const keyword of this.roomKeywords) {
-            if (command.includes(keyword)) {
-                isRoomCommand = true;
-                break;
-            }
-        }
+        // Add instruction message
+        const instruction = `
+        Analyze command: "${text}".
+        Devices: ${context} (format: name|room>id:status, 0=OFF, 1=ON, value:unit).
+        Return:
+        - For control: ${controlFormat}
+        - For info: ${infoFormat} (trả lời dạng text trong json)`;
 
-        let matchedDevices = [];
-        const searchableText = this.extractSearchableText(command);
-
-        if (isRoomCommand) {
-            // Get unique rooms from devices
-            const rooms = Array.from(new Set(devices.map(device => device.room)))
-                .map(room => ({ name: room.name.toLowerCase() }));
-
-            // Find best matching room
-            const bestRoomMatch = this.findBestMatch(searchableText, rooms);
-            
-            if (bestRoomMatch) {
-                matchedDevices = devices.filter(
-                    device => device.room.name.toLowerCase() === bestRoomMatch.name
-                );
-            }
-        } else {
-            // Prepare devices for fuzzy search
-            const searchableDevices = devices.map(device => ({
-                name: device.name.toLowerCase(),
-                originalDevice: device
-            }));
-
-            // Find best matching device
-            const bestDeviceMatch = this.findBestMatch(searchableText, searchableDevices);
-            
-            if (bestDeviceMatch) {
-                const matchedDevice = searchableDevices.find(
-                    d => d.name === bestDeviceMatch.name
-                );
-                if (matchedDevice) {
-                    matchedDevices = [matchedDevice.originalDevice];
-                }
-            }
-        }
-
-        // If no matches found, don't default to all devices
-        if (matchedDevices.length === 0) {
-            throw new Error('No matching devices or rooms found for the command');
-        }
-
-        // Update device status through MQTT directly
-        const results = await Promise.all(
-            matchedDevices.map(async device => {
-                try {
-                    const command = CommandTypeEnum.SET_STATUS;
-                    await this.mqttPublisher.publishToDevice(
-                        device.room.id,
-                        device.id,
-                        command,
-                        isOn
-                    );
-                    
-                    // Update device status in database
-                    await this.deviceService.updateDeviceStatus(device.id, isOn);
-                    
-                    return {
-                        deviceId: device.id,
-                        name: device.name,
-                        roomName: device.room.name,
-                        success: true,
-                        command
-                    };
-                } catch (error) {
-                    return {
-                        deviceId: device.id,
-                        name: device.name,
-                        roomName: device.room.name,
-                        success: false,
-                        error: error.message
-                    };
-                }
-            })
+        // Get structured response from AI
+        const response = await this.geminiAIService.generateStructuredOutput<AIResponse>(
+            text,
+            instruction,
+            controlFormat,
+            infoFormat
         );
 
-        return {
-            command: CommandTypeEnum.SET_STATUS,
-            value: isOn,
-            isRoomCommand,
-            results
-        };
+      
+        
+        // Handle response based on type
+        if (response.type === 'control') {
+            // Update devices and publish status
+            const now = new Date();
+            const updates = [];
+            const mqttMessages = [];
+
+            for (const change of response.d) {
+                const device = devices.find(d => d.id === change.i);
+                if(!device) continue;
+                
+                let needsUpdate = false;
+                
+                // Check status change
+                if (device.status !== (change.s === 1)) {
+                    device.status = change.s === 1;
+                    needsUpdate = true;
+                }
+                
+                // Only update value if it's not null and different
+                if (change.v !== null && device.value !== change.v) {
+                    device.value = change.v;
+                    needsUpdate = true;
+                }
+                
+                if (needsUpdate) {
+                    updates.push(device);
+                    const statusMessage = {
+                        deviceId: device.id,
+                        status: device.status,
+                        value: device.value,
+                        isOnline: device.isOnline,
+                        isConnected: device.isConnected,
+                        config: device.config,
+                        lastErrorAt: device.lastErrorAt,
+                        lastSeenAt: device.lastSeenAt,
+                        updatedAt: device.updatedAt,
+                        unit: device.unit,
+                        manufacturer: device.manufacturer,
+                        model: device.model,
+                        serialNumber: device.serialNumber,
+                        firmwareVersion: device.firmwareVersion,
+                        timestamp: now.toISOString(),
+                    };
+                    // Prepare MQTT message
+                    mqttMessages.push({
+                        topic: `home/${device.room.id}/${device.id}/status`,
+                        payload: JSON.stringify(statusMessage),
+                        qos: 1,
+                        retain: false
+                    });
+                }
+            }
+
+            // Save all changes and publish all messages in parallel
+            if (updates.length > 0) {
+                await Promise.all([
+                    this.deviceService.saveMany(updates),
+                    ...mqttMessages.map(msg => this.mqttPublisher.publish(msg))
+                ]);
+
+                // Group devices by type of change
+                const statusChanges = [];
+                const valueChanges = [];
+
+                updates.forEach(device => {
+                    const change = response.d.find(d => d.i === device.id);
+                    if (!change) return;
+
+                    if (change.v !== null) {
+                        valueChanges.push({
+                            name: device.name,
+                            room: device.room.name,
+                            value: device.value,
+                            unit: device.unit || ''
+                        });
+                    } else {
+                        statusChanges.push({
+                            name: device.name,
+                            room: device.room.name,
+                            status: device.status
+                        });
+                    }
+                });
+
+                // Build response message
+                const responseMessages = [];
+
+                if (valueChanges.length > 0) {
+                    const valueMsg = valueChanges
+                        .map(device => `${device.name} ở ${device.room} thành ${device.value}${device.unit}`)
+                        .join(', ');
+                    responseMessages.push(`Đã điều chỉnh ${valueMsg}`);
+                }
+
+                if (statusChanges.length > 0) {
+                    const status = statusChanges[0].status;
+                    const statusMsg = statusChanges
+                        .map(device => `${device.name} ở ${device.room}`)
+                        .join(', ');
+                    responseMessages.push(`Đã ${status ? 'bật' : 'tắt'} ${statusMsg}`);
+                }
+
+                return responseMessages.join('. ');
+            }
+            return 'Không có thiết bị nào cần thay đổi';
+        } else {
+            // For info queries, return the text directly
+            return response.text;
+        }
     }
 }
+
+export const cleanDevice = (devices: Device[]): DeviceClean[] => {
+    return devices.map((device) => ({
+        id: device.id,
+        name: device.name,
+        roomName: device.room.name,
+        status: device.status ? 1 : 0,
+        value: device.value,
+        unit: device.unit
+    }));
+};

@@ -16,12 +16,13 @@ import databaseConfig from './config/database/configuration';
 import { validateConfig } from './config/env.validation';
 import { VoiceControllerModule } from './modules/voice-controller/voice-controller.module';
 import jwtConfig from './config/jwt/configuration';
+import apiKeysConfig from './config/api-keys/configuration';
 
 @Module({
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
-            load: [appConfig, databaseConfig, jwtConfig],
+            load: [appConfig, databaseConfig, jwtConfig, apiKeysConfig],
             validate: validateConfig,
         }),
         TypeOrmModule.forRootAsync({
