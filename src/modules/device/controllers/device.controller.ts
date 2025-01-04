@@ -97,7 +97,7 @@ export class DeviceController {
     @Get('controller/:controllerId/device')
     @ApiOperation({ summary: 'Get devices by controller id' })
     findDeviceByControllerId(@Param('controllerId', ParseUUIDPipe) controllerId: string) {
-        return this.deviceService.findDeviceByControllerId(controllerId);
+        return this.deviceService.findDeviceByControllerId2(controllerId);
     }
 
     @Patch(':id')

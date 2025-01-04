@@ -11,7 +11,7 @@ interface DeviceClean {
     id: string;
     name: string;
     roomName: string;
-    status: number;  // 0 or 1
+    status: number; // 0 or 1
     value: number;
     unit: string;
 }
@@ -19,15 +19,15 @@ interface DeviceClean {
 export interface AIControlResponse {
     type: 'control';
     d: Array<{
-        i: string;   // id
-        s: number;   // status (0 or 1)
-        v: number;   // value
+        i: string; // id
+        s: number; // status (0 or 1)
+        v: number; // value
     }>;
 }
 
 export interface AIInfoResponse {
     type: 'info';
-    text: string;    // Text response about device status
+    text: string; // Text response about device status
 }
 
 export type AIResponse = AIControlResponse | AIInfoResponse;
@@ -38,7 +38,7 @@ export class VoiceControllerService {
         private readonly deviceService: DeviceService,
         private readonly mqttPublisher: MqttPublisherService,
         private readonly geminiAIService: AIService,
-    ) { }
+    ) {}
 
     async handler(createVoiceControllerDto: CreateVoiceControllerDto): Promise<string> {
         const devices = await this.deviceService.findDeviceByControllerId(createVoiceControllerDto.controllerId);
@@ -50,7 +50,9 @@ export class VoiceControllerService {
         const { text } = createVoiceControllerDto;
 
         // Create minimal context with status
-        const context = deviceClean.map(d => `${d.name}|${d.roomName}>${d.id}:${d.status}:${d.value}${d.unit}`).join(',');
+        const context = deviceClean
+            .map((d) => `${d.name}|${d.roomName}>${d.id}:${d.status}:${d.value}${d.unit}`)
+            .join(',');
 
         console.log(context);
 
@@ -71,11 +73,9 @@ export class VoiceControllerService {
             text,
             instruction,
             controlFormat,
-            infoFormat
+            infoFormat,
         );
 
-      
-        
         // Handle response based on type
         if (response.type === 'control') {
             // Update devices and publish status
@@ -84,48 +84,39 @@ export class VoiceControllerService {
             const mqttMessages = [];
 
             for (const change of response.d) {
-                const device = devices.find(d => d.id === change.i);
-                if(!device) continue;
-                
+                const device = devices.find((d) => d.id === change.i);
+                if (!device) continue;
+
                 let needsUpdate = false;
-                
+
                 // Check status change
                 if (device.status !== (change.s === 1)) {
                     device.status = change.s === 1;
                     needsUpdate = true;
                 }
-                
+
                 // Only update value if it's not null and different
                 if (change.v !== null && device.value !== change.v) {
                     device.value = change.v;
                     needsUpdate = true;
                 }
-                
+
                 if (needsUpdate) {
                     updates.push(device);
                     const statusMessage = {
-                        deviceId: device.id,
+                        id: device.id,
                         status: device.status,
                         value: device.value,
                         isOnline: device.isOnline,
                         isConnected: device.isConnected,
-                        config: device.config,
-                        lastErrorAt: device.lastErrorAt,
-                        lastSeenAt: device.lastSeenAt,
-                        updatedAt: device.updatedAt,
-                        unit: device.unit,
-                        manufacturer: device.manufacturer,
-                        model: device.model,
-                        serialNumber: device.serialNumber,
-                        firmwareVersion: device.firmwareVersion,
                         timestamp: now.toISOString(),
                     };
-                    // Prepare MQTT message
-                    mqttMessages.push({
+
+                    await this.mqttPublisher.publish({
                         topic: `home/${device.room.id}/${device.id}/status`,
                         payload: JSON.stringify(statusMessage),
                         qos: 1,
-                        retain: false
+                        retain: false,
                     });
                 }
             }
@@ -134,15 +125,15 @@ export class VoiceControllerService {
             if (updates.length > 0) {
                 await Promise.all([
                     this.deviceService.saveMany(updates),
-                    ...mqttMessages.map(msg => this.mqttPublisher.publish(msg))
+                    ...mqttMessages.map((msg) => this.mqttPublisher.publish(msg)),
                 ]);
 
                 // Group devices by type of change
                 const statusChanges = [];
                 const valueChanges = [];
 
-                updates.forEach(device => {
-                    const change = response.d.find(d => d.i === device.id);
+                updates.forEach((device) => {
+                    const change = response.d.find((d) => d.i === device.id);
                     if (!change) return;
 
                     if (change.v !== null) {
@@ -150,13 +141,13 @@ export class VoiceControllerService {
                             name: device.name,
                             room: device.room.name,
                             value: device.value,
-                            unit: device.unit || ''
+                            unit: device.unit || '',
                         });
                     } else {
                         statusChanges.push({
                             name: device.name,
                             room: device.room.name,
-                            status: device.status
+                            status: device.status,
                         });
                     }
                 });
@@ -166,16 +157,14 @@ export class VoiceControllerService {
 
                 if (valueChanges.length > 0) {
                     const valueMsg = valueChanges
-                        .map(device => `${device.name} ở ${device.room} thành ${device.value}${device.unit}`)
+                        .map((device) => `${device.name} ở ${device.room} thành ${device.value}${device.unit}`)
                         .join(', ');
                     responseMessages.push(`Đã điều chỉnh ${valueMsg}`);
                 }
 
                 if (statusChanges.length > 0) {
                     const status = statusChanges[0].status;
-                    const statusMsg = statusChanges
-                        .map(device => `${device.name} ở ${device.room}`)
-                        .join(', ');
+                    const statusMsg = statusChanges.map((device) => `${device.name} ở ${device.room}`).join(', ');
                     responseMessages.push(`Đã ${status ? 'bật' : 'tắt'} ${statusMsg}`);
                 }
 
@@ -196,6 +185,6 @@ export const cleanDevice = (devices: Device[]): DeviceClean[] => {
         roomName: device.room.name,
         status: device.status ? 1 : 0,
         value: device.value,
-        unit: device.unit
+        unit: device.unit,
     }));
 };

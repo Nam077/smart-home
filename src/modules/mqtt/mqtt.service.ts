@@ -8,6 +8,7 @@ import { createServer } from 'aedes-server-factory';
 
 import { Device } from '@app/modules/device/entities/device.entity';
 import { DeviceService } from '@app/modules/device/services/device.service';
+import { MqttPublisherService } from '@app/modules/global/services/mqtt-publisher.service';
 
 import {
     DeviceControlBaseDto,
@@ -18,7 +19,6 @@ import {
 import { IMqttPublisher } from './interfaces/mqtt-publisher.interface';
 import { MqttHandlerService } from './services/mqtt-handler.service';
 import { CommandTypeEnum } from './types/mqtt.types';
-import { MqttPublisherService } from '@app/modules/global/services/mqtt-publisher.service';
 
 interface IAuthenticateError extends Error {
     returnCode: number;
@@ -76,6 +76,8 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
     private setupBroker() {
         this.broker = createBroker({
             id: 'smart-home-broker',
+            concurrency: 1000, // Hỗ trợ tới 1000 client đồng thởi
+            heartbeatInterval: 60000, // 60 seconds
         });
 
         this.mqttPublisher.setBroker(this.broker);
@@ -158,6 +160,7 @@ export class MqttService implements OnModuleInit, IMqttPublisher {
             const mqttUsername = this.configService.get<string>('mqtt.username');
             const mqttPassword = this.configService.get<string>('mqtt.password');
 
+            // Only check username and password, accept any client ID
             const isAuthenticated =
                 (!mqttUsername && !mqttPassword) ||
                 (username === mqttUsername && password?.toString() === mqttPassword);

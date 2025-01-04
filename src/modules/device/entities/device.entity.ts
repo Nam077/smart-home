@@ -132,10 +132,10 @@ export class Device extends BaseEntity implements IBaseEntity {
     @Column({ default: false })
     status: boolean;
 
-    @Column({ type: 'float', nullable: true })
+    @Column({ type: 'float', nullable: true, default: 0 })
     value?: number;
 
-    @Column({ type: 'text', nullable: true })
+    @Column({ type: 'text', nullable: true, default: '%' })
     unit?: string;
 
     @Column({ nullable: true })

@@ -65,8 +65,34 @@ export class DeviceService extends BaseCrudService<Device> {
             where: { controller: { id: controllerId } },
             relations: {
                 room: true,
-                controller: true,
             },
+        });
+    }
+
+    async findDeviceByControllerId2(controllerId: string): Promise<Device[] | any> {
+        const controller = await this.controllerService.findOne({ where: { id: controllerId } });
+
+        if (!controller) {
+            throw new NotFoundException(`Controller not found: ${controllerId}`);
+        }
+
+        const devices: Device[] = await this.findAll({
+            where: { controller: { id: controllerId } },
+            relations: {
+                room: true,
+            },
+        });
+
+        return devices.map((device) => {
+            return {
+                id: device.id,
+                name: device.name,
+                type: device.type,
+                function: device.function,
+                controlPin: device.controlPin,
+                idRoom: device.room.id,
+                status: device.status,
+            };
         });
     }
 
@@ -174,6 +200,7 @@ export class DeviceService extends BaseCrudService<Device> {
                 throw new NotFoundException(`Device not found: ${id}`);
             }
 
+            // Handle relations updates
             if (updateDeviceDto.roomId && device.room.id !== updateDeviceDto.roomId) {
                 const room = await this.roomService.findById(updateDeviceDto.roomId);
 
@@ -192,17 +219,50 @@ export class DeviceService extends BaseCrudService<Device> {
                 device.user = user;
             }
 
+            // Update basic fields
+            const updateableFields = [
+                'name',
+                'type',
+                'function',
+                'controlPin',
+                'status',
+                'value',
+                'unit',
+                'description',
+                'ipAddress',
+                'port',
+                'macAddress',
+                'firmwareVersion',
+                'image',
+                'isOnline',
+                'isConnected',
+                'color',
+                'lastError',
+                'lastSeenAt',
+                'lastErrorAt',
+                'manufacturer',
+                'model',
+                'serialNumber',
+                'config',
+            ];
+
+            updateableFields.forEach((field) => {
+                if (updateDeviceDto[field] !== undefined) {
+                    device[field] = updateDeviceDto[field];
+                }
+            });
+
             if (this.hooks?.beforeUpdate) {
                 await this.hooks.beforeUpdate(id, updateDeviceDto);
             }
 
-            await queryRunner.manager.save(device);
+            const updatedDevice = await queryRunner.manager.save(device);
 
             if (this.hooks?.afterUpdate) {
-                await this.hooks.afterUpdate(device);
+                await this.hooks.afterUpdate(updatedDevice);
             }
 
-            return device;
+            return updatedDevice;
         });
     }
 

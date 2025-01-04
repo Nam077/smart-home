@@ -13,6 +13,7 @@ import { MqttHeartbeatService } from './mqtt-heartbeat.service';
 import { DeviceStatusControlDto, DeviceValueControlDto } from '../dto/device-control.dto';
 import { TopicTypeEnum, CommandTypeEnum, ICommandMessage, IStatusMessage, IConfigMessage } from '../types/mqtt.types';
 import { MqttPublisherService } from '@app/modules/global/services/mqtt-publisher.service';
+import { config } from 'process';
 
 @Injectable()
 export class MqttHandlerService {
@@ -25,57 +26,40 @@ export class MqttHandlerService {
     ) {}
 
     async handleMessage(topic: string, message: any, clientId: string): Promise<void> {
-        console.log(`Received message on topic ${topic} from client ${clientId}: ${JSON.stringify(message)}`);
-
-        const topicParts = split(topic, '/');
-
-        // Format: home/{roomId}/{deviceId?}/{type}
-        if (topicParts.length < 3 || topicParts.length > 4) {
-            this.logger.warn(`Invalid topic format: ${topic}`);
-
-            return;
-        }
-
-        const [prefix, roomId, ...rest] = topicParts;
-        const type = rest[rest.length - 1] as TopicTypeEnum;
-        const deviceId = rest.length === 2 ? rest[0] : null;
-
-        if (prefix !== 'home') {
-            this.logger.warn(`Invalid topic prefix: ${prefix}`);
-
-            return;
-        }
-
-        this.logger.debug(`Handling ${type} message for room ${roomId}${deviceId ? ` device ${deviceId}` : ''}`);
-
         try {
-            switch (type) {
-                case TopicTypeEnum.STATUS:
-                    if (!deviceId) {
-                        throw new Error('Device ID is required for status messages');
-                    }
+            const [prefix, roomId, deviceId, messageType] = topic.split('/');
 
-                    await this.handleDeviceStatus(roomId, deviceId, message as IStatusMessage);
+            if (prefix !== 'home') {
+                this.logger.warn(`Invalid topic prefix: ${prefix}`);
+                return;
+            }
+
+            if (!roomId || !deviceId || !messageType) {
+                this.logger.warn(`Invalid topic format: ${topic}`);
+                return;
+            }
+
+            // Route device_connect messages to handleDeviceControl
+            if (message.command === CommandTypeEnum.DEVICE_CONNECT) {
+                await this.handleDeviceControl(deviceId, message);
+                return;
+            }
+
+            switch (messageType) {
+                case 'status':
+                    await this.handleDeviceStatus(roomId, deviceId, message);
                     break;
 
-                case TopicTypeEnum.CONTROL:
-                    if (!deviceId) {
-                        throw new Error('Device ID is required for control messages');
-                    }
-
-                    await this.handleDeviceControl(deviceId, message as ICommandMessage);
+                case 'control':
+                    await this.handleDeviceControl(deviceId, message);
                     break;
 
-                case TopicTypeEnum.BROADCAST:
-                    await this.handleBroadcast(roomId, message as ICommandMessage);
-                    break;
-
-                case TopicTypeEnum.CONFIG:
-                    await this.handleConfig(roomId, message as IConfigMessage);
+                case 'config':
+                    await this.handleConfig(roomId, message);
                     break;
 
                 default:
-                    this.logger.warn(`Unsupported topic type: ${type}`);
+                    this.logger.warn(`Unknown message type: ${messageType}`);
             }
         } catch (error) {
             this.logger.error(`Error handling message: ${error.message}`);
@@ -120,7 +104,7 @@ export class MqttHandlerService {
 
                         // Publish status update
                         await this.mqttPublisher.publish({
-                            topic: `home/${roomId}/${device.id}/${device.type}/status`,
+                            topic: `home/${roomId}/${device.id}/status`,
                             payload: JSON.stringify({
                                 deviceId: device.id,
                                 status: true,
@@ -144,7 +128,7 @@ export class MqttHandlerService {
 
                         // Publish status update
                         await this.mqttPublisher.publish({
-                            topic: `home/${roomId}/${device.id}/${device.type}/status`,
+                            topic: `home/${roomId}/${device.id}/status`,
                             payload: JSON.stringify({
                                 deviceId: device.id,
                                 status: false,
@@ -171,7 +155,7 @@ export class MqttHandlerService {
 
                             // Publish status update
                             await this.mqttPublisher.publish({
-                                topic: `home/${roomId}/${device.id}/${device.type}/status`,
+                                topic: `home/${roomId}/${device.id}/status`,
                                 payload: JSON.stringify({
                                     deviceId: device.id,
                                     value: value,
@@ -257,15 +241,26 @@ export class MqttHandlerService {
 
     private async publishDeviceStatus(device: Device, changedFields: Record<string, any>) {
         try {
-            // Chỉ gửi các trường đã thay đổi và một số trường bắt buộc
+            // Simplified status message with only necessary fields
             const statusMessage = {
-                deviceId: device.id,
+                status: device.status,
+                value: device.value,
+                isOnline: device.isOnline,
+                isConnected: device.isConnected,
                 timestamp: new Date().toISOString(),
-                ...changedFields,
             };
 
+            const topic = `home/${device.room.id}/${device.id}/status`;
+
+            this.logger.debug(
+                this.formatLogMessage('PUBLISHING_STATUS', {
+                    topic,
+                    payload: statusMessage,
+                }),
+            );
+
             await this.mqttPublisher.publish({
-                topic: `home/${device.room.id}/${device.id}/status`,
+                topic,
                 payload: JSON.stringify(statusMessage),
                 qos: 1,
                 retain: false,
@@ -274,7 +269,6 @@ export class MqttHandlerService {
             this.logger.debug(
                 this.formatLogMessage('STATUS_PUBLISHED', {
                     deviceId: device.id,
-                    changedFields: Object.keys(changedFields),
                     status: statusMessage,
                 }),
             );
@@ -314,6 +308,25 @@ export class MqttHandlerService {
             const now = new Date();
 
             switch (payload.command) {
+                case CommandTypeEnum.DEVICE_CONNECT:
+                    if (!payload.deviceInfo) {
+                        throw new Error('Device info is required for device_connect command');
+                    }
+
+                    // Update device connection info
+                    device.isConnected = true;
+                    device.isOnline = true;
+                    device.lastSeenAt = now;
+                    device.ipAddress = payload.deviceInfo.ipAddress;
+                    device.macAddress = payload.deviceInfo.macAddress;
+                    if (payload.deviceInfo.firmwareVersion) {
+                        device.firmwareVersion = payload.deviceInfo.firmwareVersion;
+                    }
+
+                    // Start tracking device heartbeat
+                    await this.mqttHeartbeat.trackDevice(device.id, device.room.id);
+                    break;
+
                 case CommandTypeEnum.SET_STATUS:
                     dto = plainToClass(DeviceStatusControlDto, {
                         ...payload,
@@ -365,31 +378,29 @@ export class MqttHandlerService {
             device.lastSeenAt = now;
             await device.save();
 
-            // Chuẩn bị message trạng thái và gửi lên MQTT
             const statusMessage = {
-                deviceId: device.id,
+                id: device.id,
                 status: device.status,
                 value: device.value,
                 isOnline: device.isOnline,
                 isConnected: device.isConnected,
-                config: device.config,
-                lastErrorAt: device.lastErrorAt,
-                lastSeenAt: device.lastSeenAt,
-                updatedAt: device.updatedAt,
-                unit: device.unit,
-                manufacturer: device.manufacturer,
-                model: device.model,
-                serialNumber: device.serialNumber,
-                firmwareVersion: device.firmwareVersion,
                 timestamp: now.toISOString(),
             };
 
             await this.mqttPublisher.publish({
-                topic: `home/${device.room.id}/${deviceId}/status`,
+                topic: `home/${device.room.id}/${device.id}/status`,
                 payload: JSON.stringify(statusMessage),
                 qos: 1,
                 retain: false,
             });
+
+            this.logger.debug(
+                this.formatLogMessage('CONTROL_SENT', {
+                    deviceId,
+                    command: payload.command,
+                    status: statusMessage,
+                }),
+            );
 
             return device;
         } catch (error) {

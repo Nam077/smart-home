@@ -138,6 +138,8 @@ export class MqttPublisherService implements IMqttPublisher {
     }
 
     async publish(packet: any): Promise<void> {
+        console.log('publishing packet', packet);
+
         if (!this.broker) {
             this.logger.error('Broker not initialized');
             throw new Error('Broker not initialized');
